@@ -22,7 +22,9 @@ export default function ChatWidget() {
     if (isOpen && user) {
       // Get all potential contacts
       api.getUsers().then(({ data }) => {
-        if (data) setUsers(data.filter((u: any) => u.id !== user.id) as User[]);
+        // Blindagem
+        const allUsers = (data as User[]) || [];
+        if (allUsers) setUsers(allUsers.filter((u: any) => u.id !== user.id));
       });
 
       // Presence Channel to see who is online
@@ -53,7 +55,8 @@ export default function ChatWidget() {
     if (isOpen && view === 'chat' && activeChatUser && user) {
       const fetchMsgs = async () => {
         const { data } = await api.getMessages(user.id, activeChatUser.id);
-        if (data) setMessages(data as any);
+        // Blindagem
+        setMessages((data as any) || []);
       };
       
       fetchMsgs();
@@ -118,6 +121,10 @@ export default function ChatWidget() {
       </button>
     );
   }
+  
+  // Arrays protegidos
+  const safeUsers = users || [];
+  const safeMessages = messages || [];
 
   return (
     <div className="bg-white w-80 h-[500px] rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-fade-in-up">
@@ -144,8 +151,8 @@ export default function ChatWidget() {
         {/* VIEW: USER LIST */}
         {view === 'users' && (
           <div className="overflow-y-auto p-2 space-y-1 h-full">
-            {users.length === 0 && <p className="text-center text-slate-400 text-sm mt-10">Nenhum outro usuário encontrado.</p>}
-            {users.map(u => {
+            {safeUsers.length === 0 && <p className="text-center text-slate-400 text-sm mt-10">Nenhum outro usuário encontrado.</p>}
+            {safeUsers.map(u => {
               const isOnline = onlineUserIds.has(u.id);
               return (
                 <button 
@@ -176,12 +183,12 @@ export default function ChatWidget() {
         {view === 'chat' && (
           <>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-100">
-              {messages.length === 0 && (
+              {safeMessages.length === 0 && (
                 <div className="text-center text-slate-400 text-xs mt-4">
                   Inicie a conversa com {activeChatUser?.name}
                 </div>
               )}
-              {messages.map((msg) => {
+              {safeMessages.map((msg) => {
                 const isMe = msg.sender_id === user?.id;
                 return (
                   <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>

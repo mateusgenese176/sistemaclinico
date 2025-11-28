@@ -12,7 +12,8 @@ export default function AdminPage() {
 
   const fetchUsers = async () => {
     const { data } = await api.getUsers();
-    if (data) setUsers(data as User[]);
+    // Blindagem
+    setUsers((data as User[]) || []);
   };
 
   useEffect(() => { fetchUsers(); }, []);
@@ -59,6 +60,9 @@ export default function AdminPage() {
       setDeletingId(null);
     }
   };
+
+  // Proteção
+  const safeUsers = users || [];
 
   return (
     <div className="space-y-6 animate-fade-in-up">
@@ -142,7 +146,7 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {users.map(u => (
+              {safeUsers.map(u => (
                 <tr key={u.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-6 py-4 font-medium text-slate-800">{u.name}</td>
                   <td className="px-6 py-4 text-slate-500">{u.username}</td>

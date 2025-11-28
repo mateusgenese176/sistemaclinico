@@ -23,7 +23,8 @@ export default function PatientProfile() {
   const fetchHistory = async () => {
     if (id && user?.role === UserRole.DOCTOR) {
       const { data } = await api.getAnamneses(id);
-      setHistory(data as any);
+      // Blindagem: Se data for null, usa array vazio []
+      setHistory((data as any) || []);
     }
   };
 
@@ -106,6 +107,9 @@ export default function PatientProfile() {
   };
 
   if (!patient) return <div>Carregando...</div>;
+
+  // Proteção extra para renderização
+  const historyList = history || [];
 
   return (
     <>
@@ -250,7 +254,7 @@ export default function PatientProfile() {
                       onClick={() => setActiveTab('anamnesis')}
                       className={`flex-1 py-4 text-sm font-bold uppercase tracking-wide transition-colors ${activeTab === 'anamnesis' ? 'bg-white text-blue-900 border-t-2 border-blue-900' : 'text-slate-400 hover:text-slate-600'}`}
                     >
-                      Histórico ({history.length})
+                      Histórico ({historyList.length})
                     </button>
                   </div>
     
@@ -300,7 +304,7 @@ export default function PatientProfile() {
     
                     {activeTab === 'anamnesis' && (
                       <div className="space-y-6">
-                        {history.map(item => (
+                        {historyList.map(item => (
                           <div key={item.id} className="border border-slate-200 rounded-xl p-5 hover:shadow-lg transition-all bg-white group relative">
                             {/* Status Badge */}
                             {item.status === 'draft' ? (
@@ -352,7 +356,7 @@ export default function PatientProfile() {
                             </div>
                           </div>
                         ))}
-                        {history.length === 0 && <p className="text-center text-slate-400 py-10">Nenhum histórico encontrado.</p>}
+                        {historyList.length === 0 && <p className="text-center text-slate-400 py-10">Nenhum histórico encontrado.</p>}
                       </div>
                     )}
                   </div>

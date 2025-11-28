@@ -16,7 +16,8 @@ export default function PatientsPage() {
 
   const fetchPatients = async () => {
     const { data } = await api.getPatients();
-    if (data) setPatients(data as any);
+    // Blindagem
+    setPatients((data as Patient[]) || []);
   };
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
@@ -43,7 +44,9 @@ export default function PatientsPage() {
     }
   };
 
-  const filtered = patients.filter(p => 
+  const safePatients = patients || [];
+
+  const filtered = safePatients.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.cpf?.includes(searchTerm)
   );

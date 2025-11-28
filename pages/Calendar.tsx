@@ -32,14 +32,22 @@ export default function CalendarPage() {
 
   useEffect(() => {
     fetchData();
-    api.getUsers().then(({ data }) => setDoctors(data?.filter((u:any) => u.role === 'doctor') || []));
-    api.getPatients().then(({ data }) => setPatients(data || []));
+    api.getUsers().then(({ data }) => {
+        // Blindagem
+        const allUsers = (data as User[]) || [];
+        setDoctors(allUsers.filter((u:any) => u.role === 'doctor'));
+    });
+    api.getPatients().then(({ data }) => {
+        // Blindagem
+        setPatients((data as Patient[]) || []);
+    });
   }, [date]);
 
   const fetchData = async () => {
     const dateStr = date.toISOString().split('T')[0];
     const { data } = await api.getAppointments(dateStr);
-    if (data) setAppointments(data as Appointment[]);
+    // Blindagem
+    setAppointments((data as Appointment[]) || []);
   };
 
   const handleDragStart = (e: React.DragEvent, aptId: string) => {
@@ -130,9 +138,11 @@ export default function CalendarPage() {
     }
   };
 
+  const safeAppointments = appointments || [];
+  
   const filteredAppointments = selectedDoctor === 'all' 
-    ? appointments 
-    : appointments.filter(a => a.doctor_id === selectedDoctor);
+    ? safeAppointments 
+    : safeAppointments.filter(a => a.doctor_id === selectedDoctor);
 
   const timeSlots = Array.from({ length: 11 }, (_, i) => {
     const hour = i + 8; // 8:00 to 18:00
@@ -140,7 +150,7 @@ export default function CalendarPage() {
   });
 
   const filteredPatientSearch = searchTerm 
-    ? patients.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.cpf?.includes(searchTerm))
+    ? (patients || []).filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.cpf?.includes(searchTerm))
     : [];
 
   return (
@@ -162,7 +172,7 @@ export default function CalendarPage() {
             className="px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-900 outline-none text-slate-700"
           >
             <option value="all">Todos os Médicos</option>
-            {doctors.map(d => <option key={d.id} value={d.id}>Dr. {d.name}</option>)}
+            {(doctors || []).map(d => <option key={d.id} value={d.id}>Dr. {d.name}</option>)}
           </select>
         </div>
 
@@ -235,7 +245,7 @@ export default function CalendarPage() {
                       </div>
                       <div className="flex items-center gap-1 text-xs text-slate-500 mt-2">
                         <UserIcon size={12} /> 
-                        Dr. {doctors.find(d => d.id === apt.doctor_id)?.name.split(' ')[0]}
+                        Dr. {(doctors || []).find(d => d.id === apt.doctor_id)?.name.split(' ')[0]}
                       </div>
                     </div>
                   ))}
@@ -310,7 +320,7 @@ export default function CalendarPage() {
                   onChange={e => setNewApt({...newApt, doctor_id: e.target.value})}
                 >
                   <option value="">Selecione...</option>
-                  {doctors.map(d => <option key={d.id} value={d.id}>Dr. {d.name}</option>)}
+                  {(doctors || []).map(d => <option key={d.id} value={d.id}>Dr. {d.name}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-4">

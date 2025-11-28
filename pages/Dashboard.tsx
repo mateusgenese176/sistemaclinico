@@ -16,20 +16,25 @@ export default function Dashboard() {
       const today = new Date().toISOString().split('T')[0];
       const { data } = await api.getAppointments(today);
       if (data) {
-        let apts = data as Appointment[];
+        let apts = (data as Appointment[]) || [];
         if (user?.role === UserRole.DOCTOR) {
           apts = apts.filter(a => a.doctor_id === user.id);
         }
         setAppointments(apts);
+      } else {
+        setAppointments([]);
       }
       setLoading(false);
     };
     fetchToday();
   }, [user]);
 
+  // Blindagem de array
+  const safeAppointments = appointments || [];
+
   const stats = [
-    { label: 'Pacientes Hoje', value: appointments.length, icon: Users, color: 'bg-blue-500' },
-    { label: 'Próxima Consulta', value: appointments.find(a => a.status === 'scheduled')?.start_time || '--:--', icon: Clock, color: 'bg-purple-500' },
+    { label: 'Pacientes Hoje', value: safeAppointments.length, icon: Users, color: 'bg-blue-500' },
+    { label: 'Próxima Consulta', value: safeAppointments.find(a => a.status === 'scheduled')?.start_time || '--:--', icon: Clock, color: 'bg-purple-500' },
   ];
 
   return (
@@ -92,20 +97,20 @@ export default function Dashboard() {
                <Activity size={18} className="text-blue-900"/> 
                {user?.role === UserRole.DOCTOR ? 'Seus Atendimentos Hoje' : 'Consultas do Dia'}
              </h3>
-             <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-bold">{appointments.length}</span>
+             <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-bold">{safeAppointments.length}</span>
            </div>
            
            <div className="p-0 flex-1 overflow-y-auto max-h-[400px]">
              {loading ? (
                 <div className="p-8 text-center text-slate-400">Carregando...</div>
-             ) : appointments.length > 0 ? (
+             ) : safeAppointments.length > 0 ? (
                <div className="divide-y divide-slate-100">
-                 {appointments.map(apt => (
+                 {safeAppointments.map(apt => (
                    <div key={apt.id} className="p-4 hover:bg-slate-50 transition-colors flex justify-between items-center group">
                       <div className="flex items-center gap-4">
                          <div className="font-mono text-slate-500 font-semibold bg-slate-100 px-2 py-1 rounded text-sm">{apt.start_time}</div>
                          <div>
-                            <p className="font-bold text-slate-800">{apt.patient?.name}</p>
+                            <p className="font-bold text-slate-800">{apt.patient?.name || 'Paciente Removido'}</p>
                             <p className="text-xs text-slate-500 capitalize">{apt.type === 'first' ? 'Primeira Consulta' : apt.type === 'return' ? 'Retorno' : 'Continuidade'}</p>
                          </div>
                       </div>
