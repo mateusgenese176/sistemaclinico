@@ -4,10 +4,12 @@ import { Appointment, Patient, User } from '../types';
 import { ChevronLeft, ChevronRight, Plus, User as UserIcon, AlertCircle, Trash2, Edit2, Search, ArrowRight } from 'lucide-react';
 import { useAuth } from '../App';
 import { useNavigate } from 'react-router-dom';
+import { useDialog } from '../components/Dialog';
 
 export default function CalendarPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const dialog = useDialog();
   const [date, setDate] = useState(new Date());
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [doctors, setDoctors] = useState<User[]>([]);
@@ -96,14 +98,15 @@ export default function CalendarPage() {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      if(!window.confirm("Tem certeza que deseja excluir esta consulta?")) return;
+      const confirmed = await dialog.confirm("Excluir Consulta", "Tem certeza que deseja cancelar e excluir esta consulta?", "danger");
+      if(!confirmed) return;
       
       setAppointments(prev => prev.filter(a => a.id !== id));
 
       try {
           await api.deleteAppointment(id);
       } catch (e) {
-          alert("Erro ao excluir consulta no banco de dados.");
+          dialog.alert("Erro", "Erro ao excluir consulta no banco de dados.");
           fetchData();
       }
   };

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../supabaseClient';
 import { User, UserRole } from '../types';
 import { Trash2, Plus, AlertCircle, Loader } from 'lucide-react';
+import { useDialog } from '../components/Dialog';
 
 export default function AdminPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -9,6 +10,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const dialog = useDialog();
 
   const fetchUsers = async () => {
     const { data } = await api.getUsers();
@@ -37,7 +39,13 @@ export default function AdminPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("ATENÇÃO: Tem certeza que deseja excluir este usuário?")) return;
+    const confirmed = await dialog.confirm(
+      "Excluir Usuário", 
+      "Tem certeza que deseja excluir este usuário? Todas as informações vinculadas a ele serão perdidas.", 
+      "danger"
+    );
+
+    if (!confirmed) return;
 
     setDeletingId(id);
     const originalUsers = [...users];
@@ -55,7 +63,7 @@ export default function AdminPage() {
       console.error(err);
       // 3. Rollback se der erro grave
       setUsers(originalUsers);
-      alert(`Falha ao excluir. \n\nErro Técnico: ${err.message}\n\nDICA: Vá na tela de Login -> 'Configurar Banco' e atualize o SQL no Supabase.`);
+      dialog.alert("Erro ao excluir", `Falha técnica: ${err.message}. Tente atualizar o SQL do banco.`);
     } finally {
       setDeletingId(null);
     }

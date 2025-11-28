@@ -4,6 +4,7 @@ import { api } from '../supabaseClient';
 import { Patient, UserRole } from '../types';
 import { useAuth } from '../App';
 import { Save, CheckCircle, ArrowLeft, Clock, AlertTriangle, FileText, Activity, ClipboardList, Stethoscope } from 'lucide-react';
+import { useDialog } from '../components/Dialog';
 
 export default function AnamnesisSession() {
   const { patientId } = useParams();
@@ -12,6 +13,7 @@ export default function AnamnesisSession() {
 
   const navigate = useNavigate();
   const { user } = useAuth();
+  const dialog = useDialog();
   
   const [patient, setPatient] = useState<Patient | null>(null);
   const [soap, setSoap] = useState({ s: '', o: '', a: '', p: '' });
@@ -103,7 +105,8 @@ export default function AnamnesisSession() {
   };
 
   const handleFinalize = async () => {
-    if (!window.confirm("Ao finalizar, você não poderá mais editar esta anamnese. Deseja continuar?")) return;
+    const confirmed = await dialog.confirm("Finalizar Anamnese", "Ao finalizar, você não poderá mais editar esta anamnese. Deseja continuar?");
+    if (!confirmed) return;
     
     // Wait for save and get the DEFINITE ID
     const savedId = await saveDraft(); 
@@ -113,10 +116,10 @@ export default function AnamnesisSession() {
         await api.updateAnamnesis(savedId, { status: 'final' });
         navigate(`/patients/${patientId}`);
       } catch (e) {
-        alert("Erro ao finalizar. Tente novamente.");
+        dialog.alert("Erro", "Erro ao finalizar. Tente novamente.");
       }
     } else {
-      alert("Erro ao salvar o rascunho antes de finalizar.");
+      dialog.alert("Erro", "Erro ao salvar o rascunho antes de finalizar.");
     }
   };
 

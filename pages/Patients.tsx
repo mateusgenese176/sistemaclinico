@@ -3,12 +3,14 @@ import { api } from '../supabaseClient';
 import { Patient } from '../types';
 import { Search, Plus, User, FileText, Calendar, Trash2, Loader } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useDialog } from '../components/Dialog';
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const navigate = useNavigate();
+  const dialog = useDialog();
 
   useEffect(() => {
     fetchPatients();
@@ -22,9 +24,13 @@ export default function PatientsPage() {
 
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!window.confirm("ATENÇÃO! \n\nIsso excluirá o paciente e TODO o seu histórico (Consultas e Anamneses). \n\nDeseja continuar?")) {
-      return;
-    }
+    const confirmed = await dialog.confirm(
+      "Excluir Paciente", 
+      "ATENÇÃO! Isso excluirá o paciente e TODO o seu histórico (Consultas e Anamneses). Deseja continuar?",
+      "danger"
+    );
+
+    if (!confirmed) return;
 
     setDeletingId(id);
     const original = [...patients];
@@ -38,7 +44,7 @@ export default function PatientsPage() {
     } catch (err: any) {
       console.error(err);
       setPatients(original);
-      alert(`Erro ao excluir: ${err.message}. \n\nIMPORTANTE: Copie o SQL na tela de Login e rode no Supabase.`);
+      dialog.alert("Erro", `Erro ao excluir: ${err.message}. IMPORTANTE: Copie o SQL na tela de Login e rode no Supabase.`);
     } finally {
       setDeletingId(null);
     }

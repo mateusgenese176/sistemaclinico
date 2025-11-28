@@ -12,6 +12,7 @@ import PatientProfile from './pages/PatientProfile';
 import UserProfile from './pages/UserProfile';
 import Dashboard from './pages/Dashboard';
 import AnamnesisSession from './pages/AnamnesisSession';
+import { DialogProvider } from './components/Dialog';
 
 // Auth Context
 interface AuthContextType {
@@ -99,37 +100,39 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={{ user, login, logout, notifications, setNotifications }}>
-      <Router>
-        <Routes>
-          <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
-          
-          {/* Protected Routes */}
-          {user ? (
-            <>
-              {/* Specialized Full Screen Routes */}
-              <Route path="/anamnesis/session/:patientId" element={<AnamnesisSession />} />
-              
-              {/* Layout Routes */}
-              <Route path="/*" element={
-                <Layout>
-                  <Routes>
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/calendar" element={<CalendarPage />} />
-                    <Route path="/patients" element={<PatientsPage />} />
-                    <Route path="/patients/new" element={<PatientCreate />} />
-                    <Route path="/patients/:id" element={<PatientProfile />} />
-                    <Route path="/profile" element={<UserProfile />} />
-                    <Route path="/admin" element={user.role === UserRole.ADMIN ? <AdminPage /> : <Navigate to="/dashboard" />} />
-                    <Route path="*" element={<Navigate to="/dashboard" />} />
-                  </Routes>
-                </Layout>
-              } />
-            </>
-          ) : (
-            <Route path="*" element={<Navigate to="/login" />} />
-          )}
-        </Routes>
-      </Router>
+      <DialogProvider>
+        <Router>
+          <Routes>
+            <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
+            
+            {/* Protected Routes */}
+            {user ? (
+              <>
+                {/* Specialized Full Screen Routes */}
+                <Route path="/anamnesis/session/:patientId" element={<AnamnesisSession />} />
+                
+                {/* Layout Routes */}
+                <Route path="/*" element={
+                  <Layout>
+                    <Routes>
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/calendar" element={<CalendarPage />} />
+                      <Route path="/patients" element={<PatientsPage />} />
+                      <Route path="/patients/new" element={<PatientCreate />} />
+                      <Route path="/patients/:id" element={<PatientProfile />} />
+                      <Route path="/profile" element={<UserProfile />} />
+                      <Route path="/admin" element={user.role === UserRole.ADMIN ? <AdminPage /> : <Navigate to="/dashboard" />} />
+                      <Route path="*" element={<Navigate to="/dashboard" />} />
+                    </Routes>
+                  </Layout>
+                } />
+              </>
+            ) : (
+              <Route path="*" element={<Navigate to="/login" />} />
+            )}
+          </Routes>
+        </Router>
+      </DialogProvider>
     </AuthContext.Provider>
   );
 }

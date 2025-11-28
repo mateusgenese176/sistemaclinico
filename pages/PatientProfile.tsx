@@ -4,11 +4,13 @@ import { api } from '../supabaseClient';
 import { Patient, Anamnesis, UserRole } from '../types';
 import { useAuth } from '../App';
 import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader } from 'lucide-react';
+import { useDialog } from '../components/Dialog';
 
 export default function PatientProfile() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const dialog = useDialog();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [history, setHistory] = useState<Anamnesis[]>([]);
   const [activeTab, setActiveTab] = useState<'details' | 'anamnesis'>('details');
@@ -63,7 +65,7 @@ export default function PatientProfile() {
     if(data) setPatient(data as any);
     setNewTags('');
     setAnthropo({ weight: '', height: '', bp_s: '', bp_d: '' });
-    alert("Dados atualizados!");
+    await dialog.alert("Sucesso", "Os dados antropométricos e tags foram atualizados com sucesso!");
   };
 
   const handlePhotoUpdate = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,13 +82,15 @@ export default function PatientProfile() {
   };
 
   const handleDeleteAnamnesis = async (anamnesisId: string) => {
-    if (!window.confirm("Excluir este rascunho permanentemente?")) return;
+    const confirmed = await dialog.confirm("Excluir Rascunho", "Deseja excluir este rascunho permanentemente?", "danger");
+    if (!confirmed) return;
+    
     setLoadingDelete(anamnesisId);
     try {
       await api.deleteAnamnesis(anamnesisId);
       setHistory(prev => prev.filter(h => h.id !== anamnesisId));
     } catch (e) {
-      alert("Erro ao excluir.");
+      dialog.alert("Erro", "Não foi possível excluir o rascunho.");
     } finally {
       setLoadingDelete(null);
     }
