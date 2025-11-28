@@ -31,21 +31,38 @@ export default function App() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Check LocalStorage session on load
+  // Check LocalStorage session on load with Safety Try/Catch
   useEffect(() => {
-    const stored = localStorage.getItem('genesis_user');
-    if (stored) {
-      setUser(JSON.parse(stored));
+    try {
+      const stored = localStorage.getItem('genesis_user');
+      // Verify if stored is a valid non-undefined string
+      if (stored && stored !== "undefined" && stored !== "null") {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.id) {
+          setUser(parsed);
+        } else {
+          // Invalid object structure
+          localStorage.removeItem('genesis_user');
+        }
+      }
+    } catch (e) {
+      console.error("Storage corrupted, clearing...", e);
+      localStorage.removeItem('genesis_user');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
-  // Poll notifications if user is logged in (Simple approach instead of another realtime sub for now)
+  // Poll notifications if user is logged in
   useEffect(() => {
     if (user) {
       const fetchNotifs = async () => {
-        const { data } = await api.getNotifications(user.id);
-        if (data) setNotifications(data as Notification[]);
+        try {
+          const { data } = await api.getNotifications(user.id);
+          if (data) setNotifications(data as Notification[]);
+        } catch (e) {
+          console.error("Failed to fetch notifications", e);
+        }
       };
       fetchNotifs();
       const interval = setInterval(fetchNotifs, 10000);
@@ -61,7 +78,7 @@ export default function App() {
       .eq('password', pass) // In prod, use hashing
       .single();
 
-    if (error || !data) throw new Error('Failed');
+    if (error || !data) throw new Error('Falha no login. Verifique suas credenciais.');
     
     setUser(data as User);
     localStorage.setItem('genesis_user', JSON.stringify(data));
@@ -69,10 +86,16 @@ export default function App() {
 
   const logout = () => {
     setUser(null);
+    setNotifications([]);
     localStorage.removeItem('genesis_user');
   };
 
-  if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-slate-900 text-white">Carregando Genesis...</div>;
+  if (loading) return (
+    <div className="h-screen w-screen flex items-center justify-center bg-slate-900 text-white flex-col gap-4">
+      <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      <p>Iniciando Genesis...</p>
+    </div>
+  );
 
   return (
     <AuthContext.Provider value={{ user, login, logout, notifications, setNotifications }}>
