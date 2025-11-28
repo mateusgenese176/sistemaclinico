@@ -50,7 +50,7 @@ export default function AnamnesisSession() {
   useEffect(() => {
     if (status === 'draft') {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-      autoSaveTimerRef.current = setTimeout(saveDraft, 45000); 
+      autoSaveTimerRef.current = setTimeout(() => saveDraft(), 45000); 
     }
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -62,8 +62,9 @@ export default function AnamnesisSession() {
     setStatus('draft');
   };
 
-  const saveDraft = async () => {
-    if (!patientId || !user) return;
+  // Modified to return the ID so handleFinalize can use it immediately
+  const saveDraft = async (): Promise<string | null> => {
+    if (!patientId || !user) return null;
     setStatus('saving');
 
     try {
@@ -74,28 +75,48 @@ export default function AnamnesisSession() {
         status: 'draft'
       };
 
-      if (anamnesisId) {
-        await api.updateAnamnesis(anamnesisId, payload);
+      let currentId = anamnesisId;
+
+      if (currentId) {
+        // Update existing
+        await api.updateAnamnesis(currentId, payload);
       } else {
-        const { data } = await api.createAnamnesis(payload);
-        if (data && data.length > 0) setAnamnesisId(data[0].id);
+        // Create new
+        const { data, error } = await api.createAnamnesis(payload);
+        if (error) throw error;
+        
+        // Critically: grab the ID from the response immediately
+        if (data && data.length > 0) {
+          currentId = data[0].id;
+          setAnamnesisId(currentId);
+        }
       }
       
       setLastSaved(new Date());
       setStatus('saved');
+      return currentId;
     } catch (e) {
       console.error(e);
       setStatus('error');
+      return null;
     }
   };
 
   const handleFinalize = async () => {
     if (!window.confirm("Ao finalizar, você não poderá mais editar esta anamnese. Deseja continuar?")) return;
     
-    await saveDraft(); 
-    if (anamnesisId) {
-      await api.updateAnamnesis(anamnesisId, { status: 'final' });
-      navigate(`/patients/${patientId}`);
+    // Wait for save and get the DEFINITE ID
+    const savedId = await saveDraft(); 
+    
+    if (savedId) {
+      try {
+        await api.updateAnamnesis(savedId, { status: 'final' });
+        navigate(`/patients/${patientId}`);
+      } catch (e) {
+        alert("Erro ao finalizar. Tente novamente.");
+      }
+    } else {
+      alert("Erro ao salvar o rascunho antes de finalizar.");
     }
   };
 
@@ -129,7 +150,7 @@ export default function AnamnesisSession() {
 
           <div className="flex gap-2 w-full md:w-auto">
              <button 
-               onClick={saveDraft}
+               onClick={() => saveDraft()}
                className="flex-1 md:flex-none px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-medium text-sm transition-colors border border-slate-200"
              >
                Salvar Rascunho
