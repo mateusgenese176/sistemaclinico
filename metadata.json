@@ -1,0 +1,5 @@
+{
+  "name": "Genesis Medical",
+  "description": "A modern, welcoming medical clinic management system with role-based access, patient records (SOAP), scheduling, and real-time internal communication.",
+  "requestFramePermissions": []
+}
