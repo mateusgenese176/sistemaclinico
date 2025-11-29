@@ -16,9 +16,8 @@ export default function PatientProfile() {
   const [activeTab, setActiveTab] = useState<'details' | 'anamnesis'>('details');
   const [loadingDelete, setLoadingDelete] = useState<string | null>(null);
   
-  // States for viewing and printing
+  // View Modal State
   const [viewAnamnesis, setViewAnamnesis] = useState<Anamnesis | null>(null);
-  const [printAnamnesisData, setPrintAnamnesisData] = useState<Anamnesis | null>(null);
 
   const [newTags, setNewTags] = useState('');
   const [anthropo, setAnthropo] = useState({ weight: '', height: '', bp_s: '', bp_d: '' });
@@ -101,12 +100,141 @@ export default function PatientProfile() {
     navigate(`/anamnesis/session/${id}?editId=${anamnesisId}`);
   };
 
+  // --- NOVA ESTRATÉGIA DE IMPRESSÃO (POPUP WINDOW) ---
   const handlePrint = (anamnesis: Anamnesis) => {
-    setPrintAnamnesisData(anamnesis);
-    // Allow state to update and render the print view before triggering print
-    setTimeout(() => {
-      window.print();
-    }, 300);
+    if (!patient) return;
+
+    const printWindow = window.open('', '_blank', 'width=900,height=800');
+    if (!printWindow) {
+      dialog.alert("Bloqueio de Popup", "Por favor, permita popups para imprimir o documento.");
+      return;
+    }
+
+    const docDate = new Date(anamnesis.created_at).toLocaleDateString();
+    const docTime = new Date(anamnesis.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <title>Prontuário - ${patient.name}</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+        <style>
+          body { font-family: 'Inter', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          @page { size: A4; margin: 1.5cm; }
+          .break-inside-avoid { page-break-inside: avoid; }
+          /* Reset tailwind defaults that might conflict */
+          ul { list-style-type: disc; margin-left: 1.5em; }
+          ol { list-style-type: decimal; margin-left: 1.5em; }
+        </style>
+      </head>
+      <body class="bg-white text-slate-900 p-8 max-w-4xl mx-auto">
+        
+        <!-- Header -->
+        <div class="border-b-2 border-slate-900 pb-6 mb-8 flex justify-between items-end">
+          <div>
+              <div class="flex items-center gap-2 mb-2">
+                 <span class="text-3xl text-blue-900">⚕</span> 
+                 <h1 class="text-3xl font-bold tracking-tight text-slate-900">GENESIS MEDICAL</h1>
+              </div>
+              <p class="text-xs text-slate-500 uppercase tracking-widest pl-1">Relatório de Atendimento Clínico</p>
+          </div>
+          <div class="text-right">
+              <p class="text-sm font-medium text-slate-600">Data: <span class="font-bold text-slate-900">${docDate}</span></p>
+              <p class="text-sm font-medium text-slate-600">Hora: <span class="font-bold text-slate-900">${docTime}</span></p>
+          </div>
+        </div>
+
+        <!-- Patient Info Grid -->
+        <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-8 grid grid-cols-2 gap-y-4 gap-x-8 text-sm break-inside-avoid shadow-sm">
+          <div>
+            <span class="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Paciente</span>
+            <span class="text-lg font-bold text-slate-900 block">${patient.name}</span>
+          </div>
+          <div>
+            <span class="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">CPF</span>
+            <span class="text-base text-slate-800 font-mono">${patient.cpf || 'Não informado'}</span>
+          </div>
+          <div>
+            <span class="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Data de Nascimento</span>
+            <span class="text-base text-slate-800">${patient.dob ? new Date(patient.dob).toLocaleDateString() : 'N/A'}</span>
+          </div>
+          <div>
+            <span class="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Médico Responsável</span>
+            <span class="text-base text-slate-800 font-medium">Dr. ${anamnesis.doctor?.name}</span>
+          </div>
+        </div>
+
+        <!-- SOAP Sections -->
+        <div class="space-y-8">
+          
+          <div class="break-inside-avoid">
+             <div class="flex items-center gap-2 border-b border-indigo-200 pb-2 mb-3">
+               <span class="bg-indigo-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">S</span> 
+               <h3 class="text-base font-bold text-indigo-900 uppercase">Subjetivo</h3>
+             </div>
+             <div class="text-sm leading-relaxed text-justify text-slate-700 pl-2">
+               ${anamnesis.soap.s}
+             </div>
+          </div>
+
+          <div class="break-inside-avoid">
+             <div class="flex items-center gap-2 border-b border-emerald-200 pb-2 mb-3">
+               <span class="bg-emerald-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">O</span> 
+               <h3 class="text-base font-bold text-emerald-900 uppercase">Objetivo</h3>
+             </div>
+             <div class="text-sm leading-relaxed text-justify text-slate-700 pl-2">
+               ${anamnesis.soap.o}
+             </div>
+          </div>
+
+          <div class="break-inside-avoid">
+             <div class="flex items-center gap-2 border-b border-amber-200 pb-2 mb-3">
+               <span class="bg-amber-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">A</span> 
+               <h3 class="text-base font-bold text-amber-900 uppercase">Avaliação</h3>
+             </div>
+             <div class="text-sm leading-relaxed text-justify text-slate-700 pl-2">
+               ${anamnesis.soap.a}
+             </div>
+          </div>
+
+          <div class="break-inside-avoid">
+             <div class="flex items-center gap-2 border-b border-blue-200 pb-2 mb-3">
+               <span class="bg-blue-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">P</span> 
+               <h3 class="text-base font-bold text-blue-900 uppercase">Plano</h3>
+             </div>
+             <div class="text-sm leading-relaxed text-justify text-slate-700 pl-2">
+               ${anamnesis.soap.p}
+             </div>
+          </div>
+
+        </div>
+
+        <!-- Signature Footer -->
+        <div class="mt-24 pt-8 text-center break-inside-avoid">
+            <div class="inline-block px-12 border-t border-slate-400 min-w-[300px]">
+              <p class="font-bold text-slate-900 mt-2 text-lg">Dr. ${anamnesis.doctor?.name}</p>
+              <p class="text-sm text-slate-600">CRM: ${anamnesis.doctor?.crm || '___________'}</p>
+            </div>
+            <p class="text-[10px] text-slate-400 mt-8 italic">Documento gerado eletronicamente pelo sistema Genesis Medical em ${new Date().toLocaleDateString()} às ${new Date().toLocaleTimeString()}.</p>
+        </div>
+
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 500);
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   if (!patient) return <div>Carregando...</div>;
@@ -115,85 +243,6 @@ export default function PatientProfile() {
 
   return (
     <>
-      {/* --- PRINT LAYOUT (Using ID for Global CSS targeting) --- */}
-      {printAnamnesisData && (
-        <div id="print-area" className="hidden">
-           <div className="font-sans text-slate-900 max-w-4xl mx-auto">
-             {/* Header */}
-             <div className="border-b-2 border-slate-800 pb-6 mb-8 flex justify-between items-end">
-                <div>
-                   <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">GENESIS MEDICAL</h1>
-                   <p className="text-sm text-slate-500 uppercase tracking-widest">Relatório de Atendimento</p>
-                </div>
-                <div className="text-right">
-                   <p className="text-sm font-medium">Data: {new Date(printAnamnesisData.created_at).toLocaleDateString()}</p>
-                   <p className="text-sm font-medium">Hora: {new Date(printAnamnesisData.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                </div>
-             </div>
-
-             {/* Patient & Doctor Info */}
-             <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 mb-8 grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
-                <div>
-                  <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Paciente</span>
-                  <span className="text-lg font-bold text-slate-900">{patient.name}</span>
-                </div>
-                <div>
-                  <span className="block text-xs font-bold text-slate-500 uppercase mb-1">CPF</span>
-                  <span className="text-base text-slate-900">{patient.cpf || 'Não informado'}</span>
-                </div>
-                <div>
-                  <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Data de Nascimento</span>
-                  <span className="text-base text-slate-900">{patient.dob ? new Date(patient.dob).toLocaleDateString() : 'N/A'}</span>
-                </div>
-                <div>
-                  <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Médico Responsável</span>
-                  <span className="text-base text-slate-900 font-medium">Dr. {printAnamnesisData.doctor?.name}</span>
-                </div>
-             </div>
-
-             {/* SOAP Content */}
-             <div className="space-y-8">
-                <div className="relative">
-                   <h3 className="text-base font-bold text-slate-900 uppercase border-b border-slate-200 pb-2 mb-3 flex items-center gap-2">
-                     <span className="bg-slate-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs">S</span> Subjetivo
-                   </h3>
-                   <div className="text-sm leading-relaxed text-justify prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: printAnamnesisData.soap.s }}></div>
-                </div>
-
-                <div className="relative">
-                   <h3 className="text-base font-bold text-slate-900 uppercase border-b border-slate-200 pb-2 mb-3 flex items-center gap-2">
-                     <span className="bg-slate-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs">O</span> Objetivo
-                   </h3>
-                   <div className="text-sm leading-relaxed text-justify prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: printAnamnesisData.soap.o }}></div>
-                </div>
-
-                <div className="relative">
-                   <h3 className="text-base font-bold text-slate-900 uppercase border-b border-slate-200 pb-2 mb-3 flex items-center gap-2">
-                     <span className="bg-slate-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs">A</span> Avaliação
-                   </h3>
-                   <div className="text-sm leading-relaxed text-justify prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: printAnamnesisData.soap.a }}></div>
-                </div>
-
-                <div className="relative">
-                   <h3 className="text-base font-bold text-slate-900 uppercase border-b border-slate-200 pb-2 mb-3 flex items-center gap-2">
-                     <span className="bg-slate-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs">P</span> Plano
-                   </h3>
-                   <div className="text-sm leading-relaxed text-justify prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: printAnamnesisData.soap.p }}></div>
-                </div>
-             </div>
-
-             {/* Footer / Signature */}
-             <div className="mt-24 pt-8 text-center break-inside-avoid">
-                 <div className="inline-block px-12 border-t border-slate-800">
-                    <p className="font-bold text-slate-900 mt-2">Dr. {printAnamnesisData.doctor?.name}</p>
-                    <p className="text-xs text-slate-500">CRM: {printAnamnesisData.doctor?.crm || '___________'}</p>
-                 </div>
-                 <p className="text-[10px] text-slate-400 mt-8">Documento gerado eletronicamente pelo sistema Genesis Medical em {new Date().toLocaleDateString()} às {new Date().toLocaleTimeString()}.</p>
-             </div>
-           </div>
-        </div>
-      )}
-
       {/* --- VIEW MODAL (Eye Icon) --- */}
       {viewAnamnesis && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm print:hidden">
@@ -204,7 +253,7 @@ export default function PatientProfile() {
                     <p className="text-xs text-slate-500">{new Date(viewAnamnesis.created_at).toLocaleDateString()} - Dr. {viewAnamnesis.doctor?.name}</p>
                  </div>
                  <div className="flex gap-2">
-                    <button onClick={() => handlePrint(viewAnamnesis)} className="p-2 hover:bg-white rounded-lg text-slate-500 hover:text-blue-900 transition-colors" title="Imprimir">
+                    <button onClick={() => handlePrint(viewAnamnesis)} className="p-2 hover:bg-white rounded-lg text-slate-500 hover:text-blue-900 transition-colors" title="Imprimir em Nova Janela">
                        <Printer size={20} />
                     </button>
                     <button onClick={() => setViewAnamnesis(null)} className="p-2 hover:bg-white rounded-lg text-slate-500 hover:text-red-600 transition-colors">
@@ -238,7 +287,7 @@ export default function PatientProfile() {
       )}
 
       {/* --- SCREEN LAYOUT --- */}
-      <div className="space-y-6 animate-fade-in-up print:hidden">
+      <div className="space-y-6 animate-fade-in-up">
         <div className="flex justify-between items-center no-print">
           <button onClick={() => navigate('/patients')} className="text-slate-500 hover:text-blue-900 flex items-center gap-2 transition-colors">
               <ArrowLeft size={20} /> Voltar
