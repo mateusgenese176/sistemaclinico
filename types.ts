@@ -1,3 +1,4 @@
+
 export enum UserRole {
   ADMIN = 'admin',
   DOCTOR = 'doctor',
@@ -40,6 +41,8 @@ export interface Appointment {
   date: string; // YYYY-MM-DD
   start_time: string; // HH:mm
   type: 'first' | 'return' | 'continuity';
+  plan?: string; // 'particular', 'unimed', etc.
+  price?: number;
   status: 'scheduled' | 'completed' | 'cancelled';
   patient?: Patient; // Joined
   doctor?: User; // Joined

@@ -1,12 +1,14 @@
+
 import React, { useState } from 'react';
 import { 
   Menu, Calendar, Users, FileText, UserPlus, 
-  LogOut, Bell, ChevronLeft, ChevronRight, UserCircle, Home, CheckCircle, X
+  LogOut, Bell, ChevronLeft, ChevronRight, UserCircle, Home, CheckCircle, X, DollarSign
 } from 'lucide-react';
 import { useAuth } from '../App';
 import ChatWidget from './Chat';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../supabaseClient';
+import { UserRole } from '../types';
 
 export default function Layout({ children }: { children?: React.ReactNode }) {
   const { user, logout, notifications, setNotifications } = useAuth();
@@ -21,6 +23,10 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
     { icon: Calendar, label: 'Agenda', path: '/calendar' },
     { icon: Users, label: 'Pacientes', path: '/patients' },
   ];
+
+  if (user?.role === UserRole.ADMIN || user?.role === UserRole.DOCTOR) {
+    navItems.push({ icon: DollarSign, label: 'Financeiro', path: '/financial' });
+  }
 
   if (user?.role === 'admin') {
     navItems.push({ icon: UserPlus, label: 'Usuários', path: '/admin' });

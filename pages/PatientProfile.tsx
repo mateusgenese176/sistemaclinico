@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../supabaseClient';
 import { Patient, Anamnesis, UserRole } from '../types';
 import { useAuth } from '../App';
-import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader, Eye, X } from 'lucide-react';
+import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader, Eye, X, Upload, Check } from 'lucide-react';
 import { useDialog } from '../components/Dialog';
 
 export default function PatientProfile() {
@@ -19,13 +20,17 @@ export default function PatientProfile() {
   // View Modal State
   const [viewAnamnesis, setViewAnamnesis] = useState<Anamnesis | null>(null);
 
+  // Webcam State
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+
   const [newTags, setNewTags] = useState('');
   const [anthropo, setAnthropo] = useState({ weight: '', height: '', bp_s: '', bp_d: '' });
 
   const fetchHistory = async () => {
     if (id && user?.role === UserRole.DOCTOR) {
       const { data } = await api.getAnamneses(id);
-      // Blindagem: Se data for null, usa array vazio []
       setHistory((data as any) || []);
     }
   };
@@ -60,7 +65,6 @@ export default function PatientProfile() {
       anthropometrics: updatedAnthropo
     });
     
-    // Refresh
     const { data } = await api.getPatient(id);
     if(data) setPatient(data as any);
     setNewTags('');
@@ -68,16 +72,57 @@ export default function PatientProfile() {
     await dialog.alert("Sucesso", "Os dados antropométricos e tags foram atualizados com sucesso!");
   };
 
-  const handlePhotoUpdate = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const updatePhoto = async (base64: string) => {
+     if(id) {
+        await api.updatePatient(id, { photo_url: base64 });
+        setPatient(prev => prev ? ({ ...prev, photo_url: base64 }) : null);
+     }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && id) {
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64 = reader.result as string;
-        await api.updatePatient(id, { photo_url: base64 });
-        setPatient(prev => prev ? ({ ...prev, photo_url: base64 }) : null);
+        await updatePhoto(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      setStream(mediaStream);
+      setIsCameraOpen(true);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (e) {
+      dialog.alert("Erro", "Não foi possível acessar a câmera.");
+    }
+  };
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    setIsCameraOpen(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(videoRef.current, 0, 0);
+        const base64 = canvas.toDataURL('image/jpeg');
+        updatePhoto(base64);
+        stopCamera();
+      }
     }
   };
 
@@ -100,10 +145,8 @@ export default function PatientProfile() {
     navigate(`/anamnesis/session/${id}?editId=${anamnesisId}`);
   };
 
-  // --- NOVA ESTRATÉGIA DE IMPRESSÃO (POPUP WINDOW) ---
   const handlePrint = (anamnesis: Anamnesis) => {
     if (!patient) return;
-
     const printWindow = window.open('', '_blank', 'width=900,height=800');
     if (!printWindow) {
       dialog.alert("Bloqueio de Popup", "Por favor, permita popups para imprimir o documento.");
@@ -125,14 +168,9 @@ export default function PatientProfile() {
           body { font-family: 'Inter', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           @page { size: A4; margin: 1.5cm; }
           .break-inside-avoid { page-break-inside: avoid; }
-          /* Reset tailwind defaults that might conflict */
-          ul { list-style-type: disc; margin-left: 1.5em; }
-          ol { list-style-type: decimal; margin-left: 1.5em; }
         </style>
       </head>
       <body class="bg-white text-slate-900 p-8 max-w-4xl mx-auto">
-        
-        <!-- Header -->
         <div class="border-b-2 border-slate-900 pb-6 mb-8 flex justify-between items-end">
           <div>
               <div class="flex items-center gap-2 mb-2">
@@ -146,8 +184,6 @@ export default function PatientProfile() {
               <p class="text-sm font-medium text-slate-600">Hora: <span class="font-bold text-slate-900">${docTime}</span></p>
           </div>
         </div>
-
-        <!-- Patient Info Grid -->
         <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-8 grid grid-cols-2 gap-y-4 gap-x-8 text-sm break-inside-avoid shadow-sm">
           <div>
             <span class="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Paciente</span>
@@ -166,10 +202,7 @@ export default function PatientProfile() {
             <span class="text-base text-slate-800 font-medium">Dr. ${anamnesis.doctor?.name}</span>
           </div>
         </div>
-
-        <!-- SOAP Sections -->
         <div class="space-y-8">
-          
           <div class="break-inside-avoid">
              <div class="flex items-center gap-2 border-b border-indigo-200 pb-2 mb-3">
                <span class="bg-indigo-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">S</span> 
@@ -179,7 +212,6 @@ export default function PatientProfile() {
                ${anamnesis.soap.s}
              </div>
           </div>
-
           <div class="break-inside-avoid">
              <div class="flex items-center gap-2 border-b border-emerald-200 pb-2 mb-3">
                <span class="bg-emerald-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">O</span> 
@@ -189,7 +221,6 @@ export default function PatientProfile() {
                ${anamnesis.soap.o}
              </div>
           </div>
-
           <div class="break-inside-avoid">
              <div class="flex items-center gap-2 border-b border-amber-200 pb-2 mb-3">
                <span class="bg-amber-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">A</span> 
@@ -199,7 +230,6 @@ export default function PatientProfile() {
                ${anamnesis.soap.a}
              </div>
           </div>
-
           <div class="break-inside-avoid">
              <div class="flex items-center gap-2 border-b border-blue-200 pb-2 mb-3">
                <span class="bg-blue-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">P</span> 
@@ -209,10 +239,7 @@ export default function PatientProfile() {
                ${anamnesis.soap.p}
              </div>
           </div>
-
         </div>
-
-        <!-- Signature Footer -->
         <div class="mt-24 pt-8 text-center break-inside-avoid">
             <div class="inline-block px-12 border-t border-slate-400 min-w-[300px]">
               <p class="font-bold text-slate-900 mt-2 text-lg">Dr. ${anamnesis.doctor?.name}</p>
@@ -220,18 +247,12 @@ export default function PatientProfile() {
             </div>
             <p class="text-[10px] text-slate-400 mt-8 italic">Documento gerado eletronicamente pelo sistema Genesis Medical em ${new Date().toLocaleDateString()} às ${new Date().toLocaleTimeString()}.</p>
         </div>
-
         <script>
-          window.onload = function() {
-            setTimeout(function() {
-              window.print();
-            }, 500);
-          }
+          window.onload = function() { setTimeout(function() { window.print(); }, 500); }
         </script>
       </body>
       </html>
     `;
-
     printWindow.document.open();
     printWindow.document.write(htmlContent);
     printWindow.document.close();
@@ -286,7 +307,6 @@ export default function PatientProfile() {
         </div>
       )}
 
-      {/* --- SCREEN LAYOUT --- */}
       <div className="space-y-6 animate-fade-in-up">
         <div className="flex justify-between items-center no-print">
           <button onClick={() => navigate('/patients')} className="text-slate-500 hover:text-blue-900 flex items-center gap-2 transition-colors">
@@ -298,20 +318,35 @@ export default function PatientProfile() {
           {/* Profile Card */}
           <div className="w-full md:w-1/3 space-y-6">
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center relative group">
-                  <div className="w-32 h-32 mx-auto rounded-full bg-slate-100 border-4 border-slate-50 shadow-md overflow-hidden mb-4 relative">
-                    {patient.photo_url ? (
-                      <img src={patient.photo_url} alt={patient.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="flex items-center justify-center w-full h-full text-slate-300 text-4xl font-bold">{patient.name.charAt(0)}</div>
-                    )}
-                    
-                    {/* Hover Upload */}
-                    <label className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white text-xs font-medium flex-col">
-                      <Camera size={24} className="mb-1" />
-                      Alterar Foto
-                      <input type="file" accept="image/*" onChange={handlePhotoUpdate} className="hidden" />
-                    </label>
-                  </div>
+                  
+                  {isCameraOpen ? (
+                     <div className="relative w-full h-48 bg-black rounded-xl overflow-hidden shadow-lg mb-4">
+                        <video ref={videoRef} autoPlay muted className="w-full h-full object-cover" onLoadedMetadata={() => videoRef.current?.play()} />
+                        <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-4">
+                           <button type="button" onClick={stopCamera} className="bg-red-500 p-2 rounded-full text-white"><X size={16}/></button>
+                           <button type="button" onClick={capturePhoto} className="bg-green-500 p-2 rounded-full text-white"><Check size={16}/></button>
+                        </div>
+                     </div>
+                  ) : (
+                    <div className="w-32 h-32 mx-auto rounded-full bg-slate-100 border-4 border-slate-50 shadow-md overflow-hidden mb-4 relative">
+                        {patient.photo_url ? (
+                        <img src={patient.photo_url} alt={patient.name} className="w-full h-full object-cover" />
+                        ) : (
+                        <div className="flex items-center justify-center w-full h-full text-slate-300 text-4xl font-bold">{patient.name.charAt(0)}</div>
+                        )}
+                        
+                        {/* Hover Upload */}
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white text-xs font-medium flex-col gap-2">
+                           <button onClick={startCamera} className="hover:text-blue-200 flex flex-col items-center">
+                              <Camera size={20} className="mb-1" /> Camera
+                           </button>
+                           <label className="hover:text-blue-200 flex flex-col items-center cursor-pointer">
+                              <Upload size={20} className="mb-1" /> Upload
+                              <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                           </label>
+                        </div>
+                    </div>
+                  )}
                   
                   <h2 className="text-2xl font-bold text-slate-900">{patient.name}</h2>
                   <p className="text-slate-500 text-sm">ID: {patient.id.slice(0, 8)}</p>
@@ -378,7 +413,6 @@ export default function PatientProfile() {
                   <div className="p-6 flex-1">
                     {activeTab === 'details' && (
                       <div className="space-y-6">
-                        {/* Start Session Button */}
                         <div className="bg-blue-900 rounded-xl p-6 text-white text-center shadow-lg shadow-blue-900/30">
                             <h3 className="text-xl font-bold mb-2">Iniciar Atendimento</h3>
                             <p className="text-blue-200 mb-6 text-sm">Abra uma nova sessão de anamnese para registrar a evolução do paciente.</p>
@@ -423,14 +457,12 @@ export default function PatientProfile() {
                       <div className="space-y-6">
                         {historyList.map(item => (
                           <div key={item.id} className="border border-slate-200 rounded-xl p-5 hover:shadow-lg transition-all bg-white group relative">
-                            {/* Status Badge */}
                             {item.status === 'draft' ? (
                                 <div className="absolute top-0 right-0 bg-amber-100 text-amber-800 text-[10px] px-2 py-1 rounded-bl-lg font-bold uppercase tracking-wide">Rascunho</div>
                             ) : (
                                 <div className="absolute top-0 right-0 bg-emerald-100 text-emerald-800 text-[10px] px-2 py-1 rounded-bl-lg font-bold uppercase tracking-wide">Finalizado</div>
                             )}
 
-                            {/* Header */}
                             <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-3">
                               <div>
                                 <p className="font-bold text-blue-900 text-lg">{new Date(item.created_at).toLocaleDateString()}</p>
@@ -438,7 +470,6 @@ export default function PatientProfile() {
                               </div>
                               
                               <div className="flex gap-2 no-print">
-                                {/* Always Show View Button */}
                                 <button 
                                     onClick={() => setViewAnamnesis(item)}
                                     className="text-slate-500 hover:text-blue-600 p-1 hover:bg-blue-50 rounded"
@@ -473,7 +504,6 @@ export default function PatientProfile() {
                               </div>
                             </div>
 
-                            {/* Content Preview (HTML SAFE) */}
                             <div className="grid grid-cols-2 gap-6 text-sm opacity-60">
                               <div><strong className="text-blue-700 block text-xs uppercase mb-1">Subjetivo</strong> <div className="text-slate-600 line-clamp-3 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: item.soap.s }}></div></div>
                               <div><strong className="text-blue-700 block text-xs uppercase mb-1">Objetivo</strong> <div className="text-slate-600 line-clamp-3 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: item.soap.o }}></div></div>

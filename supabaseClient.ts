@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 
 // Provided keys
@@ -53,9 +54,22 @@ create table if not exists appointments (
   date date not null,
   start_time text not null,
   type text not null,
+  plan text,
+  price numeric,
   status text default 'scheduled',
   created_at timestamptz default now()
 );
+
+-- Fix Appointment Columns
+do $$ 
+begin 
+  if not exists (select 1 from information_schema.columns where table_name='appointments' and column_name='plan') then 
+    alter table appointments add column plan text; 
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='appointments' and column_name='price') then 
+    alter table appointments add column price numeric; 
+  end if;
+end $$;
 
 create table if not exists anamneses (
   id uuid default gen_random_uuid() primary key,
@@ -88,7 +102,6 @@ values ('admin', 'admin', 'admin', 'Administrator')
 on conflict (username) do nothing;
 
 -- 3. RLS POLICIES (Allow all for this demo app)
--- We drop first to avoid "policy already exists" errors
 alter table users enable row level security;
 drop policy if exists "Public access users" on users;
 create policy "Public access users" on users for all using (true);
@@ -114,7 +127,6 @@ drop policy if exists "Public access notifications" on notifications;
 create policy "Public access notifications" on notifications for all using (true);
 
 -- 4. POWERFUL DELETE FUNCTIONS (RPC)
--- Function to delete a user and EVERYTHING related to them safely
 create or replace function delete_user_fully(target_id uuid)
 returns void as $$
 begin
@@ -126,7 +138,6 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- Function to delete a patient and EVERYTHING related to them safely
 create or replace function delete_patient_fully(target_id uuid)
 returns void as $$
 begin
@@ -144,12 +155,9 @@ export const api = {
   updateUser: async (id: string, updates: any) => supabase.from('users').update(updates).eq('id', id),
   
   deleteUser: async (id: string) => {
-    // Try the "Nuclear Option" first (RPC Function)
     const { error } = await supabase.rpc('delete_user_fully', { target_id: id });
-    
     if (error) {
-      console.warn("RPC delete failed (SQL not updated?), trying manual cascade...", error);
-      // Fallback: Manual cleanup attempt from client side (less reliable due to permissions/network)
+      console.warn("RPC delete failed, trying manual...", error);
       await supabase.from('notifications').delete().eq('user_id', id);
       await supabase.from('messages').delete().or(`sender_id.eq.${id},receiver_id.eq.${id}`);
       await supabase.from('appointments').delete().eq('doctor_id', id);
@@ -166,9 +174,7 @@ export const api = {
   updatePatient: async (id: string, updates: any) => supabase.from('patients').update(updates).eq('id', id),
   
   deletePatient: async (id: string) => {
-     // Try RPC first
      const { error } = await supabase.rpc('delete_patient_fully', { target_id: id });
-
      if (error) {
        console.warn("RPC delete failed, trying manual...", error);
        await supabase.from('appointments').delete().eq('patient_id', id);
@@ -179,10 +185,11 @@ export const api = {
   },
   
   // Appointments
-  getAppointments: async (date: string) => 
-    supabase.from('appointments')
-      .select('*, patient:patients(name), doctor:users(name)')
-      .eq('date', date),
+  getAppointments: async (date?: string) => {
+    let query = supabase.from('appointments').select('*, patient:patients(name), doctor:users(name)');
+    if (date) query = query.eq('date', date);
+    return query;
+  },
   
   createAppointment: async (apt: any) => {
     if (apt.doctor_id) {
@@ -211,7 +218,6 @@ export const api = {
 
   // Chat
   getMessages: async (user1: string, user2: string) => {
-    // Get messages between two users (sent by A to B OR sent by B to A)
     return supabase
       .from('messages')
       .select('*, sender:users(name)')

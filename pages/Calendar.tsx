@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { api } from '../supabaseClient';
 import { Appointment, Patient, User } from '../types';
-import { ChevronLeft, ChevronRight, Plus, User as UserIcon, AlertCircle, Trash2, Edit2, Search, ArrowRight, Printer } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, User as UserIcon, AlertCircle, Trash2, Edit2, Search, Printer, DollarSign } from 'lucide-react';
 import { useAuth } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { useDialog } from '../components/Dialog';
@@ -29,8 +30,10 @@ export default function CalendarPage() {
     patient_id: '', 
     doctor_id: '', 
     start_time: '09:00', 
-    date: '', // Added date field
-    type: 'first' as const
+    date: '', 
+    type: 'first' as const,
+    plan: 'particular',
+    price: '' as any
   });
 
   useEffect(() => {
@@ -75,8 +78,10 @@ export default function CalendarPage() {
             patient_id: apt.patient_id,
             doctor_id: apt.doctor_id,
             start_time: apt.start_time,
-            date: apt.date, // Use appointment date
-            type: apt.type as any
+            date: apt.date,
+            type: apt.type as any,
+            plan: apt.plan || 'particular',
+            price: apt.price || ''
         });
         setSelectedPatientName(apt.patient?.name || '');
         setSearchTerm('');
@@ -86,8 +91,10 @@ export default function CalendarPage() {
           patient_id: '', 
           doctor_id: '', 
           start_time: '09:00', 
-          date: date.toISOString().split('T')[0], // Default to selected calendar date
-          type: 'first' 
+          date: date.toISOString().split('T')[0],
+          type: 'first',
+          plan: 'particular',
+          price: ''
         });
         setSelectedPatientName('');
         setSearchTerm('');
@@ -225,6 +232,7 @@ export default function CalendarPage() {
     try {
       const payload = {
         ...newApt,
+        price: newApt.price ? parseFloat(newApt.price) : 0,
         status: 'scheduled'
       };
 
@@ -355,9 +363,9 @@ export default function CalendarPage() {
                           {apt.type === 'first' ? '1ª Vez' : apt.type === 'return' ? 'Retorno' : 'Cont.'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1 text-xs text-slate-500 mt-2">
-                        <UserIcon size={12} /> 
-                        Dr. {(doctors || []).find(d => d.id === apt.doctor_id)?.name.split(' ')[0]}
+                      <div className="flex items-center gap-1 text-xs text-slate-500 mt-2 justify-between">
+                        <span className="flex items-center gap-1"><UserIcon size={12} /> Dr. {(doctors || []).find(d => d.id === apt.doctor_id)?.name.split(' ')[0]}</span>
+                        {apt.price && <span className="font-bold text-green-600">R$ {apt.price}</span>}
                       </div>
                     </div>
                   ))}
@@ -379,7 +387,7 @@ export default function CalendarPage() {
               </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
               {/* Intelligent Patient Search */}
               <div className="relative">
                 <label className="text-sm font-medium text-slate-700">Paciente</label>
@@ -436,7 +444,7 @@ export default function CalendarPage() {
                 </select>
               </div>
 
-              {/* Date Field (NEW) */}
+              {/* Date Field */}
               <div>
                 <label className="text-sm font-medium text-slate-700">Data</label>
                 <input 
@@ -471,6 +479,38 @@ export default function CalendarPage() {
                   </select>
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="text-sm font-medium text-slate-700">Plano/Convênio</label>
+                    <select 
+                       className="w-full mt-1 bg-white border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-900 outline-none"
+                       value={newApt.plan}
+                       onChange={e => setNewApt({...newApt, plan: e.target.value})}
+                    >
+                       <option value="particular">Particular</option>
+                       <option value="unimed">Unimed</option>
+                       <option value="cartao_sao_gabriel">Cartão São Gabriel</option>
+                       <option value="select">Select</option>
+                       <option value="outro">Outro</option>
+                    </select>
+                 </div>
+                 <div>
+                    <label className="text-sm font-medium text-slate-700">Valor (R$)</label>
+                    <div className="relative">
+                       <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
+                       <input 
+                         type="number"
+                         step="0.01"
+                         className="w-full mt-1 bg-white border border-slate-300 rounded-lg p-2.5 pl-8 focus:ring-2 focus:ring-blue-900 outline-none"
+                         value={newApt.price}
+                         onChange={e => setNewApt({...newApt, price: e.target.value})}
+                         placeholder="0.00"
+                       />
+                    </div>
+                 </div>
+              </div>
+
               <div className="pt-4 flex gap-2">
                 <button 
                   onClick={() => setShowModal(false)}

@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase, api } from './supabaseClient';
@@ -11,6 +12,7 @@ import PatientCreate from './pages/PatientCreate';
 import PatientProfile from './pages/PatientProfile';
 import UserProfile from './pages/UserProfile';
 import Dashboard from './pages/Dashboard';
+import FinancialDashboard from './pages/FinancialDashboard';
 import AnamnesisSession from './pages/AnamnesisSession';
 import { DialogProvider } from './components/Dialog';
 
@@ -121,6 +123,7 @@ export default function App() {
                       <Route path="/patients/new" element={<PatientCreate />} />
                       <Route path="/patients/:id" element={<PatientProfile />} />
                       <Route path="/profile" element={<UserProfile />} />
+                      <Route path="/financial" element={(user.role === UserRole.ADMIN || user.role === UserRole.DOCTOR) ? <FinancialDashboard /> : <Navigate to="/dashboard" />} />
                       <Route path="/admin" element={user.role === UserRole.ADMIN ? <AdminPage /> : <Navigate to="/dashboard" />} />
                       <Route path="*" element={<Navigate to="/dashboard" />} />
                     </Routes>
