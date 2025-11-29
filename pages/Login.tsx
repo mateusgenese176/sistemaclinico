@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { SCHEMA_SQL } from '../supabaseClient';
 import { useAuth } from '../App';
@@ -11,6 +12,8 @@ export default function Login() {
   const [showSetup, setShowSetup] = useState(false);
   const { login } = useAuth();
   const dialog = useDialog();
+
+  const LOGO_URL = "https://i.ibb.co/n8rLsXSJ/upscalemedia-transformed-1.png";
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,9 +34,7 @@ export default function Login() {
       <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
         <div className="p-8 pb-6">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl">⚕</span>
-            </div>
+            <img src={LOGO_URL} alt="Genesis Medical" className="h-24 w-auto mx-auto mb-4 object-contain" />
             <h1 className="text-4xl font-bold text-slate-900 mb-2">Genesis</h1>
             <p className="text-slate-500">Sistema de Gestão Médica</p>
           </div>

@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../App';
 import { api } from '../supabaseClient';
@@ -10,6 +11,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const LOGO_URL = "https://i.ibb.co/n8rLsXSJ/upscalemedia-transformed-1.png";
 
   useEffect(() => {
     const fetchToday = async () => {
@@ -41,8 +44,8 @@ export default function Dashboard() {
     <div className="space-y-8 animate-fade-in-up">
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-8 text-white shadow-lg relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-10 -translate-y-10">
-          <span className="text-9xl">⚕</span>
+        <div className="absolute top-1/2 right-10 transform -translate-y-1/2 opacity-10">
+          <img src={LOGO_URL} alt="Logo" className="w-64 h-auto brightness-0 invert" />
         </div>
         <div className="relative z-10">
           <h1 className="text-3xl font-bold mb-2">Olá, {user?.name}</h1>

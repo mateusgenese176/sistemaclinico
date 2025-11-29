@@ -28,6 +28,8 @@ export default function PatientProfile() {
   const [newTags, setNewTags] = useState('');
   const [anthropo, setAnthropo] = useState({ weight: '', height: '', bp_s: '', bp_d: '' });
 
+  const LOGO_URL = "https://i.ibb.co/n8rLsXSJ/upscalemedia-transformed-1.png";
+
   const fetchHistory = async () => {
     if (id && user?.role === UserRole.DOCTOR) {
       const { data } = await api.getAnamneses(id);
@@ -173,8 +175,8 @@ export default function PatientProfile() {
       <body class="bg-white text-slate-900 p-8 max-w-4xl mx-auto">
         <div class="border-b-2 border-slate-900 pb-6 mb-8 flex justify-between items-end">
           <div>
-              <div class="flex items-center gap-2 mb-2">
-                 <span class="text-3xl text-blue-900">⚕</span> 
+              <div class="flex items-center gap-3 mb-2">
+                 <img src="${LOGO_URL}" alt="Genesis" class="h-12 w-auto object-contain" />
                  <h1 class="text-3xl font-bold tracking-tight text-slate-900">GENESIS MEDICAL</h1>
               </div>
               <p class="text-xs text-slate-500 uppercase tracking-widest pl-1">Relatório de Atendimento Clínico</p>

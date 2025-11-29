@@ -18,6 +18,8 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const LOGO_URL = "https://i.ibb.co/n8rLsXSJ/upscalemedia-transformed-1.png";
+
   const navItems = [
     { icon: Home, label: 'Dashboard', path: '/dashboard' },
     { icon: Calendar, label: 'Agenda', path: '/calendar' },
@@ -66,13 +68,16 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
           <div className={`p-6 flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
             {!collapsed && (
               <div>
-                <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                  <span className="text-3xl text-blue-400">⚕</span> Genesis
-                </h1>
-                <p className="text-xs text-slate-400 mt-1">Medical System</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <img src={LOGO_URL} alt="Genesis Logo" className="h-10 w-auto brightness-0 invert" />
+                  <h1 className="text-2xl font-bold tracking-tight text-white">Genesis</h1>
+                </div>
+                <p className="text-xs text-slate-400 pl-1">Medical System</p>
               </div>
             )}
-             {collapsed && <span className="text-3xl text-blue-400">⚕</span>}
+             {collapsed && (
+               <img src={LOGO_URL} alt="Genesis Logo" className="h-8 w-auto brightness-0 invert" />
+             )}
 
             {/* Desktop Collapse Toggle */}
             <button 
@@ -142,7 +147,10 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
           <button onClick={() => setSidebarOpen(true)} className="text-slate-600 hover:text-blue-900">
             <Menu size={24} />
           </button>
-          <span className="font-bold text-slate-900 text-lg">Genesis</span>
+          <div className="flex items-center gap-2">
+            <img src={LOGO_URL} alt="Genesis" className="h-6 w-auto" />
+            <span className="font-bold text-slate-900 text-lg">Genesis</span>
+          </div>
           <div className="w-6"></div> 
         </header>
 

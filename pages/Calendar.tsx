@@ -17,6 +17,8 @@ export default function CalendarPage() {
   const [selectedDoctor, setSelectedDoctor] = useState<string>('all');
   const [patients, setPatients] = useState<Patient[]>([]);
   
+  const LOGO_URL = "https://i.ibb.co/n8rLsXSJ/upscalemedia-transformed-1.png";
+
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [error, setError] = useState('');
@@ -152,7 +154,7 @@ export default function CalendarPage() {
       <body class="bg-white text-slate-900">
         <div class="border-b-2 border-slate-900 pb-4 mb-8 flex justify-between items-center">
            <div class="flex items-center gap-3">
-              <span class="text-4xl text-blue-900">⚕</span>
+              <img src="${LOGO_URL}" alt="Genesis" class="h-10 w-auto" />
               <div>
                 <h1 class="text-2xl font-bold uppercase tracking-wider">Genesis Medical</h1>
                 <p class="text-xs text-slate-500">Comprovante de Agendamento</p>
