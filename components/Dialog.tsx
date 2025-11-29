@@ -26,7 +26,7 @@ export const useDialog = () => {
   return context;
 };
 
-export const DialogProvider = ({ children }: { children: ReactNode }) => {
+export const DialogProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [config, setConfig] = useState<DialogOptions>({ title: '', description: '' });
   

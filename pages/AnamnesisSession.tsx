@@ -5,6 +5,7 @@ import { Patient, UserRole } from '../types';
 import { useAuth } from '../App';
 import { Save, CheckCircle, ArrowLeft, Clock, AlertTriangle, FileText, Activity, ClipboardList, Stethoscope } from 'lucide-react';
 import { useDialog } from '../components/Dialog';
+import RichTextEditor from '../components/RichTextEditor';
 
 export default function AnamnesisSession() {
   const { patientId } = useParams();
@@ -21,6 +22,40 @@ export default function AnamnesisSession() {
   const [anamnesisId, setAnamnesisId] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // --- MODELOS (TEMPLATES) ---
+  const subjectiveTemplates = [
+    {
+      label: "Modelo Padrão",
+      content: `
+        <div><b>ID:</b> </div><br>
+        <div><b>QP:</b> </div><br>
+        <div><b>HDA:</b> </div><br>
+        <div><b>HI:</b> </div><br>
+        <div><b>HF:</b> </div><br>
+        <div><b>HEV:</b> </div><br>
+      `
+    }
+  ];
+
+  const objectiveTemplates = [
+    {
+      label: "Ex. Físico Masculino",
+      content: `BEG, LOTE, EUPNEICO, NORMOCORADO, ACIANÓTICO, AFEBRIL, ANICTÉRICO, HIDRATADO, FÂNEROS HIDRATADOS ECG: 15<br>
+AR: MV+ EM AHT, S/RA<br>
+ACV: RCR EM 2T, BNF, S/SA<br>
+ABD: RHA+ EM 9QD, S/ VMG OU CTZ, DEPRESSÍVEL, INDOLOR, BLUMBERG NEGATIVO, ROVSING NEGATIVO, MURPHY NEGATIVO.<br>
+EXT: SEM EDEMAS, SEM SINAIS DE TVP, TEC < 3S`
+    },
+    {
+      label: "Ex. Físico Feminino",
+      content: `BEG, LOTE, EUPNEICA, NORMOCORADA, ACIANÓTICA, AFEBRIL, ANICTÉRICA, HIDRATADA, FÂNEROS HIDRATADOS ECG: 15<br>
+AR: MV+ EM AHT, S/RA<br>
+ACV: RCR EM 2T, BNF, S/SA<br>
+ABD: RHA+ EM 9QD, S/ VMG OU CTZ, DEPRESSÍVEL, INDOLOR, BLUMBERG NEGATIVO, ROVSING NEGATIVO, MURPHY NEGATIVO.<br>
+EXT: SEM EDEMAS, SEM SINAIS DE TVP, TEC < 3S`
+    }
+  ];
 
   // Load Patient and existing Anamnesis if editing
   useEffect(() => {
@@ -182,12 +217,16 @@ export default function AnamnesisSession() {
                 <p className="text-xs text-indigo-600">O que o paciente relata: sintomas, histórico, queixas.</p>
               </div>
            </div>
-           <textarea 
-             className="w-full p-6 h-40 outline-none text-slate-700 resize-y focus:bg-slate-50 transition-colors"
-             placeholder="Descreva a história clínica, sintomas atuais e relatos do paciente..."
-             value={soap.s} 
-             onChange={e => handleChange('s', e.target.value)}
-           />
+           
+           <div className="p-2">
+             <RichTextEditor 
+                value={soap.s} 
+                onChange={(v) => handleChange('s', v)}
+                placeholder="Descreva a história clínica, sintomas atuais e relatos do paciente..."
+                templates={subjectiveTemplates}
+                colorTheme="indigo"
+             />
+           </div>
         </section>
 
         {/* Objective */}
@@ -201,12 +240,16 @@ export default function AnamnesisSession() {
                 <p className="text-xs text-emerald-600">O que você observa: exames físicos, sinais vitais, laboratório.</p>
               </div>
            </div>
-           <textarea 
-             className="w-full p-6 h-40 outline-none text-slate-700 resize-y focus:bg-slate-50 transition-colors"
-             placeholder="Registre os dados do exame físico, resultados de exames e observações clínicas..."
-             value={soap.o} 
-             onChange={e => handleChange('o', e.target.value)}
-           />
+
+           <div className="p-2">
+             <RichTextEditor 
+                value={soap.o} 
+                onChange={(v) => handleChange('o', v)}
+                placeholder="Registre os dados do exame físico, resultados de exames e observações clínicas..."
+                templates={objectiveTemplates}
+                colorTheme="emerald"
+             />
+           </div>
         </section>
 
         {/* Assessment */}
@@ -220,12 +263,15 @@ export default function AnamnesisSession() {
                 <p className="text-xs text-amber-600">Sua análise: hipóteses diagnósticas, conclusão clínica.</p>
               </div>
            </div>
-           <textarea 
-             className="w-full p-6 h-40 outline-none text-slate-700 resize-y focus:bg-slate-50 transition-colors"
-             placeholder="Descreva sua análise do caso e possíveis diagnósticos..."
-             value={soap.a} 
-             onChange={e => handleChange('a', e.target.value)}
-           />
+           
+           <div className="p-2">
+             <RichTextEditor 
+                value={soap.a} 
+                onChange={(v) => handleChange('a', v)}
+                placeholder="Descreva sua análise do caso e possíveis diagnósticos..."
+                colorTheme="amber"
+             />
+           </div>
         </section>
 
         {/* Plan */}
@@ -239,12 +285,15 @@ export default function AnamnesisSession() {
                 <p className="text-xs text-blue-600">Conduta: medicamentos, solicitações de exames, orientações.</p>
               </div>
            </div>
-           <textarea 
-             className="w-full p-6 h-40 outline-none text-slate-700 resize-y focus:bg-slate-50 transition-colors"
-             placeholder="Prescrições, encaminhamentos, orientações educativas e agendamento de retorno..."
-             value={soap.p} 
-             onChange={e => handleChange('p', e.target.value)}
-           />
+           
+           <div className="p-2">
+             <RichTextEditor 
+                value={soap.p} 
+                onChange={(v) => handleChange('p', v)}
+                placeholder="Prescrições, encaminhamentos, orientações educativas e agendamento de retorno..."
+                colorTheme="blue"
+             />
+           </div>
         </section>
 
       </div>

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../supabaseClient';
 import { Patient, Anamnesis, UserRole } from '../types';
 import { useAuth } from '../App';
-import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader } from 'lucide-react';
+import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader, Eye, X } from 'lucide-react';
 import { useDialog } from '../components/Dialog';
 
 export default function PatientProfile() {
@@ -16,7 +16,8 @@ export default function PatientProfile() {
   const [activeTab, setActiveTab] = useState<'details' | 'anamnesis'>('details');
   const [loadingDelete, setLoadingDelete] = useState<string | null>(null);
   
-  // Print State
+  // States for viewing and printing
+  const [viewAnamnesis, setViewAnamnesis] = useState<Anamnesis | null>(null);
   const [printAnamnesisData, setPrintAnamnesisData] = useState<Anamnesis | null>(null);
 
   const [newTags, setNewTags] = useState('');
@@ -105,75 +106,138 @@ export default function PatientProfile() {
     // Allow state to update and render the print view before triggering print
     setTimeout(() => {
       window.print();
-      // Optional: Clear print data after printing if you want to return to normal state immediately, 
-      // but keeping it allows re-printing without re-selecting.
-    }, 100);
+    }, 300);
   };
 
   if (!patient) return <div>Carregando...</div>;
 
-  // Proteção extra para renderização
   const historyList = history || [];
 
   return (
     <>
-      {/* --- PRINT LAYOUT (Hidden on screen, Visible on Print) --- */}
+      {/* --- PRINT LAYOUT (Using ID for Global CSS targeting) --- */}
       {printAnamnesisData && (
-        <div className="hidden print:block font-serif text-black bg-white p-8">
-          {/* Header */}
-          <div className="text-center border-b-2 border-black pb-4 mb-6">
-             <h1 className="text-2xl font-bold uppercase tracking-widest">Genesis Medical</h1>
-             <p className="text-sm">Relatório de Atendimento Médico</p>
-          </div>
+        <div id="print-area" className="hidden">
+           <div className="font-sans text-slate-900 max-w-4xl mx-auto">
+             {/* Header */}
+             <div className="border-b-2 border-slate-800 pb-6 mb-8 flex justify-between items-end">
+                <div>
+                   <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-1">GENESIS MEDICAL</h1>
+                   <p className="text-sm text-slate-500 uppercase tracking-widest">Relatório de Atendimento</p>
+                </div>
+                <div className="text-right">
+                   <p className="text-sm font-medium">Data: {new Date(printAnamnesisData.created_at).toLocaleDateString()}</p>
+                   <p className="text-sm font-medium">Hora: {new Date(printAnamnesisData.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                </div>
+             </div>
 
-          {/* Patient Info Bar */}
-          <div className="border border-black p-3 mb-6 flex justify-between items-center text-sm">
-             <div>
-               <span className="font-bold uppercase mr-2">Paciente:</span> {patient.name}
+             {/* Patient & Doctor Info */}
+             <div className="bg-slate-50 p-6 rounded-lg border border-slate-200 mb-8 grid grid-cols-2 gap-y-4 gap-x-8 text-sm">
+                <div>
+                  <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Paciente</span>
+                  <span className="text-lg font-bold text-slate-900">{patient.name}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-bold text-slate-500 uppercase mb-1">CPF</span>
+                  <span className="text-base text-slate-900">{patient.cpf || 'Não informado'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Data de Nascimento</span>
+                  <span className="text-base text-slate-900">{patient.dob ? new Date(patient.dob).toLocaleDateString() : 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-bold text-slate-500 uppercase mb-1">Médico Responsável</span>
+                  <span className="text-base text-slate-900 font-medium">Dr. {printAnamnesisData.doctor?.name}</span>
+                </div>
              </div>
-             <div>
-               <span className="font-bold uppercase mr-2">CPF:</span> {patient.cpf || 'N/A'}
-             </div>
-             <div>
-               <span className="font-bold uppercase mr-2">DN:</span> {patient.dob ? new Date(patient.dob).toLocaleDateString() : 'N/A'}
-             </div>
-          </div>
 
-          {/* Consultation Metadata */}
-          <div className="mb-6 text-sm">
-            <p><span className="font-bold">Data do Atendimento:</span> {new Date(printAnamnesisData.created_at).toLocaleDateString()} às {new Date(printAnamnesisData.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-          </div>
+             {/* SOAP Content */}
+             <div className="space-y-8">
+                <div className="relative">
+                   <h3 className="text-base font-bold text-slate-900 uppercase border-b border-slate-200 pb-2 mb-3 flex items-center gap-2">
+                     <span className="bg-slate-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs">S</span> Subjetivo
+                   </h3>
+                   <div className="text-sm leading-relaxed text-justify prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: printAnamnesisData.soap.s }}></div>
+                </div>
 
-          {/* SOAP Grid */}
-          <div className="space-y-6 mb-12">
-             <div className="border-l-4 border-black pl-4">
-               <h3 className="font-bold uppercase text-sm mb-1">Subjetivo</h3>
-               <p className="text-justify whitespace-pre-wrap text-sm leading-relaxed">{printAnamnesisData.soap.s}</p>
-             </div>
-             <div className="border-l-4 border-black pl-4">
-               <h3 className="font-bold uppercase text-sm mb-1">Objetivo</h3>
-               <p className="text-justify whitespace-pre-wrap text-sm leading-relaxed">{printAnamnesisData.soap.o}</p>
-             </div>
-             <div className="border-l-4 border-black pl-4">
-               <h3 className="font-bold uppercase text-sm mb-1">Avaliação</h3>
-               <p className="text-justify whitespace-pre-wrap text-sm leading-relaxed">{printAnamnesisData.soap.a}</p>
-             </div>
-             <div className="border-l-4 border-black pl-4">
-               <h3 className="font-bold uppercase text-sm mb-1">Plano</h3>
-               <p className="text-justify whitespace-pre-wrap text-sm leading-relaxed">{printAnamnesisData.soap.p}</p>
-             </div>
-          </div>
+                <div className="relative">
+                   <h3 className="text-base font-bold text-slate-900 uppercase border-b border-slate-200 pb-2 mb-3 flex items-center gap-2">
+                     <span className="bg-slate-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs">O</span> Objetivo
+                   </h3>
+                   <div className="text-sm leading-relaxed text-justify prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: printAnamnesisData.soap.o }}></div>
+                </div>
 
-          {/* Footer / Signature */}
-          <div className="mt-20 flex flex-col items-center justify-center page-break-inside-avoid">
-             <div className="w-64 border-t border-black mb-2"></div>
-             <p className="font-bold text-sm uppercase">Dr. {printAnamnesisData.doctor?.name}</p>
-             <p className="text-xs">CRM: {printAnamnesisData.doctor?.crm || '___________'}</p>
-          </div>
+                <div className="relative">
+                   <h3 className="text-base font-bold text-slate-900 uppercase border-b border-slate-200 pb-2 mb-3 flex items-center gap-2">
+                     <span className="bg-slate-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs">A</span> Avaliação
+                   </h3>
+                   <div className="text-sm leading-relaxed text-justify prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: printAnamnesisData.soap.a }}></div>
+                </div>
+
+                <div className="relative">
+                   <h3 className="text-base font-bold text-slate-900 uppercase border-b border-slate-200 pb-2 mb-3 flex items-center gap-2">
+                     <span className="bg-slate-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs">P</span> Plano
+                   </h3>
+                   <div className="text-sm leading-relaxed text-justify prose prose-slate max-w-none" dangerouslySetInnerHTML={{ __html: printAnamnesisData.soap.p }}></div>
+                </div>
+             </div>
+
+             {/* Footer / Signature */}
+             <div className="mt-24 pt-8 text-center break-inside-avoid">
+                 <div className="inline-block px-12 border-t border-slate-800">
+                    <p className="font-bold text-slate-900 mt-2">Dr. {printAnamnesisData.doctor?.name}</p>
+                    <p className="text-xs text-slate-500">CRM: {printAnamnesisData.doctor?.crm || '___________'}</p>
+                 </div>
+                 <p className="text-[10px] text-slate-400 mt-8">Documento gerado eletronicamente pelo sistema Genesis Medical em {new Date().toLocaleDateString()} às {new Date().toLocaleTimeString()}.</p>
+             </div>
+           </div>
         </div>
       )}
 
-      {/* --- SCREEN LAYOUT (Visible on Screen, Hidden on Print) --- */}
+      {/* --- VIEW MODAL (Eye Icon) --- */}
+      {viewAnamnesis && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm print:hidden">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl h-[80vh] flex flex-col animate-fade-in-up">
+              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                 <div>
+                    <h3 className="font-bold text-slate-800">Visualizar Anamnese</h3>
+                    <p className="text-xs text-slate-500">{new Date(viewAnamnesis.created_at).toLocaleDateString()} - Dr. {viewAnamnesis.doctor?.name}</p>
+                 </div>
+                 <div className="flex gap-2">
+                    <button onClick={() => handlePrint(viewAnamnesis)} className="p-2 hover:bg-white rounded-lg text-slate-500 hover:text-blue-900 transition-colors" title="Imprimir">
+                       <Printer size={20} />
+                    </button>
+                    <button onClick={() => setViewAnamnesis(null)} className="p-2 hover:bg-white rounded-lg text-slate-500 hover:text-red-600 transition-colors">
+                       <X size={20} />
+                    </button>
+                 </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                 {/* SOAP Content View */}
+                 <div className="space-y-6">
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                       <h4 className="font-bold text-blue-900 mb-2 flex items-center gap-2 text-sm uppercase"><span className="bg-blue-100 p-1 rounded">S</span> Subjetivo</h4>
+                       <div className="prose prose-sm max-w-none text-slate-700" dangerouslySetInnerHTML={{ __html: viewAnamnesis.soap.s }}></div>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                       <h4 className="font-bold text-emerald-900 mb-2 flex items-center gap-2 text-sm uppercase"><span className="bg-emerald-100 p-1 rounded">O</span> Objetivo</h4>
+                       <div className="prose prose-sm max-w-none text-slate-700" dangerouslySetInnerHTML={{ __html: viewAnamnesis.soap.o }}></div>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                       <h4 className="font-bold text-amber-900 mb-2 flex items-center gap-2 text-sm uppercase"><span className="bg-amber-100 p-1 rounded">A</span> Avaliação</h4>
+                       <div className="prose prose-sm max-w-none text-slate-700" dangerouslySetInnerHTML={{ __html: viewAnamnesis.soap.a }}></div>
+                    </div>
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                       <h4 className="font-bold text-purple-900 mb-2 flex items-center gap-2 text-sm uppercase"><span className="bg-purple-100 p-1 rounded">P</span> Plano</h4>
+                       <div className="prose prose-sm max-w-none text-slate-700" dangerouslySetInnerHTML={{ __html: viewAnamnesis.soap.p }}></div>
+                    </div>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* --- SCREEN LAYOUT --- */}
       <div className="space-y-6 animate-fade-in-up print:hidden">
         <div className="flex justify-between items-center no-print">
           <button onClick={() => navigate('/patients')} className="text-slate-500 hover:text-blue-900 flex items-center gap-2 transition-colors">
@@ -325,6 +389,15 @@ export default function PatientProfile() {
                               </div>
                               
                               <div className="flex gap-2 no-print">
+                                {/* Always Show View Button */}
+                                <button 
+                                    onClick={() => setViewAnamnesis(item)}
+                                    className="text-slate-500 hover:text-blue-600 p-1 hover:bg-blue-50 rounded"
+                                    title="Visualizar Completa"
+                                >
+                                    <Eye size={18} />
+                                </button>
+
                                 {item.status === 'draft' && (
                                   <>
                                     <button 
@@ -351,12 +424,10 @@ export default function PatientProfile() {
                               </div>
                             </div>
 
-                            {/* Content Preview */}
-                            <div className="grid grid-cols-2 gap-6 text-sm">
-                              <div><strong className="text-blue-700 block text-xs uppercase mb-1">Subjetivo</strong> <span className="text-slate-600 line-clamp-3">{item.soap.s}</span></div>
-                              <div><strong className="text-blue-700 block text-xs uppercase mb-1">Objetivo</strong> <span className="text-slate-600 line-clamp-3">{item.soap.o}</span></div>
-                              <div><strong className="text-blue-700 block text-xs uppercase mb-1">Avaliação</strong> <span className="text-slate-600 line-clamp-3">{item.soap.a}</span></div>
-                              <div><strong className="text-blue-700 block text-xs uppercase mb-1">Plano</strong> <span className="text-slate-600 line-clamp-3">{item.soap.p}</span></div>
+                            {/* Content Preview (HTML SAFE) */}
+                            <div className="grid grid-cols-2 gap-6 text-sm opacity-60">
+                              <div><strong className="text-blue-700 block text-xs uppercase mb-1">Subjetivo</strong> <div className="text-slate-600 line-clamp-3 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: item.soap.s }}></div></div>
+                              <div><strong className="text-blue-700 block text-xs uppercase mb-1">Objetivo</strong> <div className="text-slate-600 line-clamp-3 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: item.soap.o }}></div></div>
                             </div>
                           </div>
                         ))}
