@@ -85,8 +85,17 @@ create table if not exists messages (
   sender_id uuid references users(id) on delete cascade,
   receiver_id uuid references users(id) on delete cascade,
   content text not null,
+  is_urgent boolean default false,
   created_at timestamptz default now()
 );
+
+-- Fix Messages Columns
+do $$ 
+begin 
+  if not exists (select 1 from information_schema.columns where table_name='messages' and column_name='is_urgent') then 
+    alter table messages add column is_urgent boolean default false; 
+  end if;
+end $$;
 
 create table if not exists notifications (
   id uuid default gen_random_uuid() primary key,
@@ -227,6 +236,7 @@ export const api = {
   },
   
   sendMessage: async (msg: any) => supabase.from('messages').insert(msg),
+  deleteMessage: async (id: string) => supabase.from('messages').delete().eq('id', id),
 
   // Notifications
   getNotifications: async (userId: string) => 

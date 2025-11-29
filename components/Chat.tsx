@@ -1,11 +1,17 @@
+
 import React, { useEffect, useState, useRef } from 'react';
-import { MessageCircle, X, Send, User as UserIcon, ArrowLeft, Circle } from 'lucide-react';
+import { MessageCircle, X, Send, User as UserIcon, ArrowLeft, Trash2, AlertTriangle, Bell } from 'lucide-react';
 import { supabase, api } from '../supabaseClient';
 import { useAuth } from '../App';
 import { Message, User } from '../types';
+import { useDialog } from './Dialog';
+
+// Sound effect for new messages
+const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
 export default function ChatWidget() {
   const { user } = useAuth();
+  const dialog = useDialog();
   const [isOpen, setIsOpen] = useState(false);
   const [view, setView] = useState<'users' | 'chat'>('users');
   const [activeChatUser, setActiveChatUser] = useState<User | null>(null);
@@ -15,25 +21,24 @@ export default function ChatWidget() {
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [isUrgent, setIsUrgent] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(new Audio(NOTIFICATION_SOUND));
 
   // 1. Fetch Users and Track Presence
   useEffect(() => {
     if (isOpen && user) {
-      // Get all potential contacts
       api.getUsers().then(({ data }) => {
-        // Blindagem
         const allUsers = (data as User[]) || [];
         if (allUsers) setUsers(allUsers.filter((u: any) => u.id !== user.id));
       });
 
-      // Presence Channel to see who is online
       const presenceChannel = supabase.channel('online_users')
         .on('presence', { event: 'sync' }, () => {
           const state = presenceChannel.presenceState();
           const online = new Set<string>();
           for (const id in state) {
-            // Supabase presence state keys usually map to tracking IDs, we look at payload
              state[id].forEach((p: any) => {
                if(p.user_id) online.add(p.user_id);
              });
@@ -50,30 +55,63 @@ export default function ChatWidget() {
     }
   }, [isOpen, user]);
 
-  // 2. Chat Logic (When entering a chat room)
+  // 2. Chat Logic (Subscription handles both INSERT and DELETE)
+  useEffect(() => {
+    if (user) {
+      // Global subscription for important alerts and incoming messages even when chat is closed or in another view
+      const globalChannel = supabase
+        .channel(`global_chat:${user.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${user.id}` },
+          (payload) => {
+            const msg = payload.new as Message;
+            
+            // Play Sound
+            audioRef.current.play().catch(e => console.log("Audio interaction needed"));
+
+            // Handle Urgent Popup
+            if (msg.is_urgent) {
+              dialog.alert(
+                "⚠️ AVISO IMPORTANTE", 
+                `Mensagem urgente de ${msg.sender_id === activeChatUser?.id ? activeChatUser.name : 'um usuário'}: "${msg.content}"`
+              );
+            }
+          }
+        )
+        .subscribe();
+
+      return () => { supabase.removeChannel(globalChannel); };
+    }
+  }, [user, activeChatUser, dialog]);
+
+  // 3. Active Chat Subscription (Syncs UI)
   useEffect(() => {
     if (isOpen && view === 'chat' && activeChatUser && user) {
       const fetchMsgs = async () => {
         const { data } = await api.getMessages(user.id, activeChatUser.id);
-        // Blindagem
         setMessages((data as any) || []);
       };
       
       fetchMsgs();
 
-      // Subscribe only to messages involving these two users
       const channel = supabase
-        .channel(`chat:${user.id}:${activeChatUser.id}`)
+        .channel(`chat_room:${user.id}:${activeChatUser.id}`)
         .on(
           'postgres_changes',
-          { event: 'INSERT', schema: 'public', table: 'messages' },
+          { event: '*', schema: 'public', table: 'messages' }, // Listen to all events
           (payload) => {
-            const msg = payload.new as Message;
-            // Only add if it belongs to this conversation
-            if (
-              (msg.sender_id === activeChatUser.id && msg.receiver_id === user.id) ||
-              (msg.sender_id === user.id && msg.receiver_id === activeChatUser.id)
-            ) {
+            // Reload on any change (Insert or Delete) involved in this chat
+            const oldMsg = payload.old as Partial<Message>;
+            const newMsg = payload.new as Message;
+            
+            // Check if this event relates to current active chat
+            const relevant = 
+              (newMsg.sender_id === activeChatUser.id && newMsg.receiver_id === user.id) ||
+              (newMsg.sender_id === user.id && newMsg.receiver_id === activeChatUser.id) ||
+              (oldMsg.id && messages.some(m => m.id === oldMsg.id)); // For deletion
+
+            if (relevant || payload.eventType === 'DELETE') {
                fetchMsgs(); 
             }
           }
@@ -96,8 +134,16 @@ export default function ChatWidget() {
       sender_id: user.id,
       receiver_id: activeChatUser.id,
       content: newMessage,
+      is_urgent: isUrgent
     });
     setNewMessage('');
+    setIsUrgent(false);
+  };
+
+  const handleDeleteMessage = async (msgId: string) => {
+    // Optimistic update
+    setMessages(prev => prev.filter(m => m.id !== msgId));
+    await api.deleteMessage(msgId);
   };
 
   const handleUserSelect = (targetUser: User) => {
@@ -122,7 +168,6 @@ export default function ChatWidget() {
     );
   }
   
-  // Arrays protegidos
   const safeUsers = users || [];
   const safeMessages = messages || [];
 
@@ -191,12 +236,28 @@ export default function ChatWidget() {
               {safeMessages.map((msg) => {
                 const isMe = msg.sender_id === user?.id;
                 return (
-                  <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                  <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group`}>
                     <div className={`
-                      max-w-[85%] rounded-2xl p-3 text-sm shadow-sm
+                      max-w-[85%] rounded-2xl p-3 text-sm shadow-sm relative
                       ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none'}
+                      ${msg.is_urgent ? 'border-2 border-red-500 bg-red-50 text-red-900' : ''}
                     `}>
+                      {msg.is_urgent && (
+                        <div className="flex items-center gap-1 text-[10px] font-bold uppercase mb-1 text-red-600">
+                          <AlertTriangle size={10} /> Urgente
+                        </div>
+                      )}
                       {msg.content}
+                      
+                      {isMe && (
+                        <button 
+                          onClick={() => handleDeleteMessage(msg.id)}
+                          className="absolute -left-8 top-1/2 -translate-y-1/2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                          title="Apagar mensagem para todos"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
                     </div>
                     <span className="text-[10px] text-slate-400 mt-1 px-1">
                       {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -207,19 +268,35 @@ export default function ChatWidget() {
               <div ref={messagesEndRef} />
             </div>
 
-            <form onSubmit={handleSend} className="p-3 border-t border-slate-200 bg-white flex gap-2">
-              <input 
-                type="text" 
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Digite..."
-                className="flex-1 text-sm bg-slate-50 border-slate-200 border rounded-full px-4 focus:ring-2 focus:ring-blue-900 outline-none transition-all"
-                autoFocus
-              />
-              <button type="submit" className="text-blue-900 hover:bg-blue-50 p-2 rounded-full transition-colors">
-                <Send size={20} />
-              </button>
-            </form>
+            <div className="p-2 border-t border-slate-200 bg-white">
+               {isUrgent && (
+                 <div className="bg-red-50 text-red-600 text-xs px-3 py-1 rounded-t-lg flex justify-between items-center">
+                   <span className="font-bold flex items-center gap-1"><AlertTriangle size={12}/> Enviando como Aviso Importante</span>
+                   <button onClick={() => setIsUrgent(false)}><X size={12}/></button>
+                 </div>
+               )}
+               <form onSubmit={handleSend} className="flex gap-2 items-center">
+                <button 
+                  type="button" 
+                  onClick={() => setIsUrgent(!isUrgent)}
+                  className={`p-2 rounded-full transition-colors ${isUrgent ? 'bg-red-100 text-red-600' : 'text-slate-400 hover:bg-slate-100'}`}
+                  title="Marcar como Aviso Importante (Abre janela no destinatário)"
+                >
+                  <Bell size={20} className={isUrgent ? "fill-current" : ""} />
+                </button>
+                <input 
+                  type="text" 
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Digite..."
+                  className={`flex-1 text-sm bg-slate-50 border border-slate-200 rounded-full px-4 py-2 focus:ring-2 outline-none transition-all ${isUrgent ? 'focus:ring-red-500 border-red-200 bg-red-50' : 'focus:ring-blue-900'}`}
+                  autoFocus
+                />
+                <button type="submit" className={`p-2 rounded-full transition-colors text-white ${isUrgent ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-900 hover:bg-blue-800'}`}>
+                  <Send size={18} />
+                </button>
+              </form>
+            </div>
           </>
         )}
       </div>

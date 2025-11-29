@@ -69,6 +69,7 @@ export interface Message {
   sender_name?: string;
   receiver_id?: string; // Null for public channel
   content: string;
+  is_urgent?: boolean;
   created_at: string;
 }
 
