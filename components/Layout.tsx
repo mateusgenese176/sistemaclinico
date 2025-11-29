@@ -12,6 +12,7 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
   const { user, logout, notifications, setNotifications } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -39,6 +40,7 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
     if(user) {
       await api.markAllNotificationsRead(user.id);
       setNotifications([]);
+      setShowNotifications(false);
     }
   };
 
@@ -149,34 +151,47 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
         <div className="fixed bottom-6 right-6 flex flex-col items-end gap-4 z-50">
            {/* Notification Badge */}
            {notifications.length > 0 && (
-            <div className="bg-white p-3 rounded-full shadow-lg border border-slate-100 relative group cursor-pointer hover:scale-105 transition-transform">
-              <Bell className="text-blue-600" size={24} />
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-sm">
-                {notifications.length}
-              </span>
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="bg-white p-3 rounded-full shadow-lg border border-slate-100 relative hover:scale-105 transition-transform"
+              >
+                <Bell className="text-blue-600" size={24} />
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 flex items-center justify-center rounded-full shadow-sm">
+                  {notifications.length}
+                </span>
+              </button>
               
               {/* Notification Popover */}
-              <div className="absolute bottom-full right-0 mb-3 w-80 bg-white rounded-xl shadow-xl border border-slate-100 hidden group-hover:block p-0 text-sm overflow-hidden">
-                <div className="bg-slate-800 px-4 py-3 flex justify-between items-center">
-                  <h3 className="font-bold text-white">Notificações</h3>
-                  <button onClick={(e) => { e.stopPropagation(); handleMarkAllRead(); }} className="text-xs text-blue-300 hover:text-white flex items-center gap-1">
-                    <CheckCircle size={12}/> Marcar todas
-                  </button>
-                </div>
-                <div className="max-h-60 overflow-y-auto">
-                  {notifications.map(n => (
-                    <div key={n.id} className="p-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 text-slate-600 flex justify-between items-start gap-2 relative group/item">
-                      <span className="flex-1">{n.content}</span>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
-                        className="text-slate-300 hover:text-red-500 p-1 opacity-0 group-hover/item:opacity-100 transition-opacity"
-                      >
-                        <X size={14} />
-                      </button>
+              {showNotifications && (
+                <div className="absolute bottom-full right-0 mb-3 w-80 bg-white rounded-xl shadow-xl border border-slate-100 p-0 text-sm overflow-hidden animate-fade-in-up">
+                  <div className="bg-slate-800 px-4 py-3 flex justify-between items-center">
+                    <h3 className="font-bold text-white">Notificações</h3>
+                    <div className="flex gap-2">
+                       <button onClick={handleMarkAllRead} className="text-xs text-blue-300 hover:text-white flex items-center gap-1">
+                         <CheckCircle size={12}/> Limpar
+                       </button>
+                       <button onClick={() => setShowNotifications(false)} className="text-slate-400 hover:text-white">
+                         <X size={16}/>
+                       </button>
                     </div>
-                  ))}
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    {notifications.map(n => (
+                      <div key={n.id} className="p-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 text-slate-600 flex justify-between items-start gap-2 relative group/item">
+                        <span className="flex-1">{n.content}</span>
+                        <button 
+                          onClick={() => handleMarkRead(n.id)}
+                          className="text-slate-300 hover:text-red-500 p-1 transition-colors"
+                          title="Marcar como lida"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
