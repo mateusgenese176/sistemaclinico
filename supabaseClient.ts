@@ -155,6 +155,13 @@ begin
   delete from patients where id = target_id;
 end;
 $$ language plpgsql security definer;
+
+-- 5. ENABLE REALTIME (Critical for Chat)
+begin;
+  drop publication if exists supabase_realtime;
+  create publication supabase_realtime;
+commit;
+alter publication supabase_realtime add table messages, notifications;
 `;
 
 export const api = {

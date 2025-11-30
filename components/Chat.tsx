@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { MessageCircle, X, Send, User as UserIcon, ArrowLeft, Trash2, AlertTriangle, Bell } from 'lucide-react';
 import { supabase, api } from '../supabaseClient';
@@ -24,7 +25,9 @@ export default function ChatWidget() {
 
   // Unread Messages Tracking
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
-  const hasUnread = Object.values(unreadCounts).some((c: number) => c > 0);
+  
+  // Explicit casting to number[] to avoid TypeScript inference issues
+  const hasUnread = (Object.values(unreadCounts) as number[]).some(c => c > 0);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(new Audio(NOTIFICATION_SOUND));
@@ -126,9 +129,9 @@ export default function ChatWidget() {
 
             // Refresh if message belongs to this conversation
             const relevant = 
-              (newMsg.sender_id === activeChatUser.id && newMsg.receiver_id === user.id) ||
-              (newMsg.sender_id === user.id && newMsg.receiver_id === activeChatUser.id) ||
-              (oldMsg.id && messages.some(m => m.id === oldMsg.id)); // Deletion check
+              (newMsg && newMsg.sender_id === activeChatUser.id && newMsg.receiver_id === user.id) ||
+              (newMsg && newMsg.sender_id === user.id && newMsg.receiver_id === activeChatUser.id) ||
+              (oldMsg && oldMsg.id && messages.some(m => m.id === oldMsg.id)); // Deletion check
 
             if (relevant || payload.eventType === 'DELETE') {
                fetchMsgs(); 
