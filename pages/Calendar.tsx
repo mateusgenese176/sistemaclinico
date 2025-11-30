@@ -83,7 +83,7 @@ export default function CalendarPage() {
             date: apt.date,
             type: apt.type as any,
             plan: apt.plan || 'particular',
-            price: apt.price || ''
+            price: apt.price !== undefined ? apt.price : ''
         });
         setSelectedPatientName(apt.patient?.name || '');
         setSearchTerm('');

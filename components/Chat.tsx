@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useRef } from 'react';
 import { MessageCircle, X, Send, User as UserIcon, ArrowLeft, Trash2, AlertTriangle, Bell } from 'lucide-react';
 import { supabase, api } from '../supabaseClient';
@@ -22,6 +21,10 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isUrgent, setIsUrgent] = useState(false);
+
+  // Unread Messages Tracking
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const hasUnread = Object.values(unreadCounts).some((c: number) => c > 0);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement>(new Audio(NOTIFICATION_SOUND));
@@ -55,10 +58,9 @@ export default function ChatWidget() {
     }
   }, [isOpen, user]);
 
-  // 2. Chat Logic (Subscription handles both INSERT and DELETE)
+  // 2. Global Listener (Notifications & Unread Counts)
   useEffect(() => {
     if (user) {
-      // Global subscription for important alerts and incoming messages even when chat is closed or in another view
       const globalChannel = supabase
         .channel(`global_chat:${user.id}`)
         .on(
@@ -67,14 +69,25 @@ export default function ChatWidget() {
           (payload) => {
             const msg = payload.new as Message;
             
-            // Play Sound
-            audioRef.current.play().catch(e => console.log("Audio interaction needed"));
+            // Check if we need to notify (if chat is closed OR talking to someone else)
+            const isChattingWithSender = isOpen && activeChatUser?.id === msg.sender_id;
+            
+            if (!isChattingWithSender) {
+               setUnreadCounts(prev => ({
+                 ...prev,
+                 [msg.sender_id]: (prev[msg.sender_id] || 0) + 1
+               }));
+               
+               // Play Sound
+               audioRef.current.play().catch(e => console.log("Audio interaction needed"));
+            }
 
             // Handle Urgent Popup
             if (msg.is_urgent) {
+              const senderName = users.find(u => u.id === msg.sender_id)?.name || 'Usuário';
               dialog.alert(
                 "⚠️ AVISO IMPORTANTE", 
-                `Mensagem urgente de ${msg.sender_id === activeChatUser?.id ? activeChatUser.name : 'um usuário'}: "${msg.content}"`
+                `Mensagem urgente de ${senderName}: "${msg.content}"`
               );
             }
           }
@@ -83,11 +96,18 @@ export default function ChatWidget() {
 
       return () => { supabase.removeChannel(globalChannel); };
     }
-  }, [user, activeChatUser, dialog]);
+  }, [user, isOpen, activeChatUser, users, dialog]);
 
-  // 3. Active Chat Subscription (Syncs UI)
+  // 3. Active Chat Logic
   useEffect(() => {
     if (isOpen && view === 'chat' && activeChatUser && user) {
+      // Reset unread count for this user
+      setUnreadCounts(prev => {
+        const next = { ...prev };
+        delete next[activeChatUser.id];
+        return next;
+      });
+
       const fetchMsgs = async () => {
         const { data } = await api.getMessages(user.id, activeChatUser.id);
         setMessages((data as any) || []);
@@ -99,17 +119,16 @@ export default function ChatWidget() {
         .channel(`chat_room:${user.id}:${activeChatUser.id}`)
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'messages' }, // Listen to all events
+          { event: '*', schema: 'public', table: 'messages' }, 
           (payload) => {
-            // Reload on any change (Insert or Delete) involved in this chat
-            const oldMsg = payload.old as Partial<Message>;
             const newMsg = payload.new as Message;
-            
-            // Check if this event relates to current active chat
+            const oldMsg = payload.old as Partial<Message>;
+
+            // Refresh if message belongs to this conversation
             const relevant = 
               (newMsg.sender_id === activeChatUser.id && newMsg.receiver_id === user.id) ||
               (newMsg.sender_id === user.id && newMsg.receiver_id === activeChatUser.id) ||
-              (oldMsg.id && messages.some(m => m.id === oldMsg.id)); // For deletion
+              (oldMsg.id && messages.some(m => m.id === oldMsg.id)); // Deletion check
 
             if (relevant || payload.eventType === 'DELETE') {
                fetchMsgs(); 
@@ -122,6 +141,7 @@ export default function ChatWidget() {
     }
   }, [isOpen, view, activeChatUser, user]);
 
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -130,18 +150,33 @@ export default function ChatWidget() {
     e.preventDefault();
     if (!newMessage.trim() || !user || !activeChatUser) return;
 
+    const tempId = Math.random().toString();
+    const optimisticMsg: Message = {
+        id: tempId,
+        sender_id: user.id,
+        receiver_id: activeChatUser.id,
+        content: newMessage,
+        is_urgent: isUrgent,
+        created_at: new Date().toISOString()
+    };
+    
+    // Optimistic UI update
+    setMessages(prev => [...prev, optimisticMsg]);
+    const contentToSend = newMessage;
+    const urgentToSend = isUrgent;
+    
+    setNewMessage('');
+    setIsUrgent(false);
+
     await api.sendMessage({
       sender_id: user.id,
       receiver_id: activeChatUser.id,
-      content: newMessage,
-      is_urgent: isUrgent
+      content: contentToSend,
+      is_urgent: urgentToSend
     });
-    setNewMessage('');
-    setIsUrgent(false);
   };
 
   const handleDeleteMessage = async (msgId: string) => {
-    // Optimistic update
     setMessages(prev => prev.filter(m => m.id !== msgId));
     await api.deleteMessage(msgId);
   };
@@ -164,6 +199,9 @@ export default function ChatWidget() {
         className="bg-blue-900 hover:bg-blue-800 text-white p-4 rounded-full shadow-xl shadow-blue-900/30 transition-all transform hover:scale-105 relative"
       >
         <MessageCircle size={24} />
+        {hasUnread && (
+          <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full border-2 border-white animate-pulse"></span>
+        )}
       </button>
     );
   }
@@ -199,11 +237,13 @@ export default function ChatWidget() {
             {safeUsers.length === 0 && <p className="text-center text-slate-400 text-sm mt-10">Nenhum outro usuário encontrado.</p>}
             {safeUsers.map(u => {
               const isOnline = onlineUserIds.has(u.id);
+              const unreadCount = unreadCounts[u.id] || 0;
+
               return (
                 <button 
                   key={u.id}
                   onClick={() => handleUserSelect(u)}
-                  className="w-full flex items-center gap-3 p-3 hover:bg-white hover:shadow-sm rounded-xl transition-all text-left group border border-transparent hover:border-slate-100"
+                  className="w-full flex items-center gap-3 p-3 hover:bg-white hover:shadow-sm rounded-xl transition-all text-left group border border-transparent hover:border-slate-100 relative"
                 >
                   <div className="relative">
                     <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center text-slate-600 font-bold group-hover:bg-blue-100 group-hover:text-blue-700 transition-colors">
@@ -213,11 +253,18 @@ export default function ChatWidget() {
                       <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
                     )}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-slate-800">{u.name}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{u.name}</p>
                     <p className="text-xs text-slate-400 capitalize">{u.role === 'receptionist' ? 'Atendente' : 'Médico'}</p>
                   </div>
-                  <MessageCircle size={16} className="text-slate-300 group-hover:text-blue-500" />
+                  
+                  {unreadCount > 0 ? (
+                    <div className="bg-red-50 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                      {unreadCount}
+                    </div>
+                  ) : (
+                    <MessageCircle size={16} className="text-slate-300 group-hover:text-blue-500" />
+                  )}
                 </button>
               )
             })}
