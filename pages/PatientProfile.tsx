@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../supabaseClient';
@@ -43,6 +42,15 @@ export default function PatientProfile() {
       fetchHistory();
     }
   }, [id, user]);
+
+  // Camera Cleanup on Unmount
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
 
   const handleUpdateBio = async () => {
     if (!id || !patient) return;

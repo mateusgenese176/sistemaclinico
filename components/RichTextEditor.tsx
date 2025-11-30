@@ -22,20 +22,32 @@ export default function RichTextEditor({
   colorTheme = 'blue' 
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const lastHtmlRef = useRef(value);
   const [showTemplates, setShowTemplates] = useState(false);
 
-  // Sync external value changes to innerHTML (only if different to avoid cursor jumps)
+  // Sync external value changes to innerHTML ONLY if they come from outside (DB, Template)
+  // This prevents the cursor from jumping to start when the user is typing
   useEffect(() => {
-    if (editorRef.current && editorRef.current.innerHTML !== value) {
-      // Basic check to prevent overriding active typing unless completely different
-      if (value === '' && editorRef.current.innerHTML === '<br>') return;
-      editorRef.current.innerHTML = value;
+    if (!editorRef.current) return;
+
+    // If the new prop value is different from the last value we emitted...
+    if (value !== lastHtmlRef.current) {
+      // And strictly different from current HTML content...
+      if (editorRef.current.innerHTML !== value) {
+         // It means it's an external update (e.g. loaded from DB or Template inserted)
+         editorRef.current.innerHTML = value;
+         lastHtmlRef.current = value; // Sync ref
+      }
     }
   }, [value]);
 
   const handleInput = () => {
     if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      const html = editorRef.current.innerHTML;
+      // Update our reference tracker BEFORE telling parent, so when parent updates props, 
+      // the useEffect above sees they match and skips the DOM update.
+      lastHtmlRef.current = html; 
+      onChange(html);
     }
   };
 
@@ -43,22 +55,24 @@ export default function RichTextEditor({
     document.execCommand(command, false, value);
     if (editorRef.current) {
       editorRef.current.focus();
-      onChange(editorRef.current.innerHTML);
+      const html = editorRef.current.innerHTML;
+      lastHtmlRef.current = html;
+      onChange(html);
     }
   };
 
   const insertTemplate = (content: string) => {
     if (editorRef.current) {
       editorRef.current.focus();
-      // Insert HTML at cursor or append
       const success = document.execCommand('insertHTML', false, content);
       
-      // Fallback if command fails (sometimes happens if focus is lost)
       if (!success) {
         editorRef.current.innerHTML += content;
       }
       
-      onChange(editorRef.current.innerHTML);
+      const html = editorRef.current.innerHTML;
+      lastHtmlRef.current = html;
+      onChange(html);
       setShowTemplates(false);
     }
   };
@@ -123,11 +137,12 @@ export default function RichTextEditor({
         contentEditable
         onInput={handleInput}
         className="p-6 min-h-[160px] outline-none text-slate-700 text-sm leading-relaxed prose prose-sm max-w-none"
-        dangerouslySetInnerHTML={{ __html: value }}
         style={{ whiteSpace: 'pre-wrap' }}
       />
+      
+      {/* Placeholder logic (CSS based mostly, but handled conditionally here for clarity) */}
       {!value && (
-        <div className="absolute top-[52px] left-6 text-slate-300 text-sm pointer-events-none">
+        <div className="absolute top-[52px] left-6 text-slate-300 text-sm pointer-events-none select-none">
           {placeholder}
         </div>
       )}

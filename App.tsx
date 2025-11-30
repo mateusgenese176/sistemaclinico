@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase, api } from './supabaseClient';
@@ -62,9 +61,11 @@ export default function App() {
       const fetchNotifs = async () => {
         try {
           const { data } = await api.getNotifications(user.id);
-          if (data) setNotifications(data as Notification[]);
+          // Garantir que é sempre um array, nunca nulo
+          setNotifications((data as Notification[]) || []);
         } catch (e) {
           console.error("Failed to fetch notifications", e);
+          // Em caso de erro, mantém o array vazio ou o estado anterior, não define como null
         }
       };
       fetchNotifs();
