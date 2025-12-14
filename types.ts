@@ -78,6 +78,7 @@ export interface PrescriptionItem {
   medication: string;
   quantity: string;
   dosage: string;
+  usageMode?: string; // e.g., 'Uso Oral', 'Uso Tópico'
 }
 
 export interface MedicalDocument {
@@ -87,7 +88,7 @@ export interface MedicalDocument {
   type: 'prescription' | 'referral'; // Receituário ou Encaminhamento
   content: {
     items?: PrescriptionItem[]; // Para receituário
-    text?: string; // Para encaminhamento
+    text?: string; // Para encaminhamento (HTML Rich Text)
   }; 
   created_at: string;
   doctor?: User;

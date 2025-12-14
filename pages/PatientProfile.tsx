@@ -4,8 +4,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../supabaseClient';
 import { Patient, Anamnesis, UserRole, MedicalDocument, PrescriptionItem } from '../types';
 import { useAuth } from '../App';
-import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader, Eye, X, Upload, Check, FilePlus, ScrollText, MapPin } from 'lucide-react';
+import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader, Eye, X, Upload, Check, FilePlus, ScrollText, MapPin, ChevronDown } from 'lucide-react';
 import { useDialog } from '../components/Dialog';
+import RichTextEditor from '../components/RichTextEditor';
 
 export default function PatientProfile() {
   const { id } = useParams();
@@ -24,7 +25,11 @@ export default function PatientProfile() {
   // Document Modal State
   const [showDocModal, setShowDocModal] = useState(false);
   const [docType, setDocType] = useState<'prescription' | 'referral'>('prescription');
-  const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItem[]>([{ medication: '', quantity: '', dosage: '' }]);
+  
+  // Prescription State
+  const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItem[]>([{ medication: '', quantity: '', dosage: '', usageMode: 'Uso Oral' }]);
+  
+  // Referral State
   const [referralText, setReferralText] = useState('');
 
   // Webcam State
@@ -37,6 +42,22 @@ export default function PatientProfile() {
 
   const LOGO_URL = "https://i.ibb.co/n8rLsXSJ/upscalemedia-transformed-1.png";
   const HEADER_LOGO_URL = "https://i.ibb.co/sJR9zQKt/upscalemedia-transformed-1.png";
+
+  const USAGE_MODES = [
+    'Uso Oral',
+    'Uso Tópico',
+    'Uso Endovenoso',
+    'Uso Intramuscular',
+    'Uso Subcutâneo',
+    'Uso Intranasal',
+    'Uso Oftálmico',
+    'Uso Otológico',
+    'Uso Retal',
+    'Uso Vaginal',
+    'Uso Inalatório',
+    'Uso Contínuo',
+    'Outro'
+  ];
 
   const fetchHistory = async () => {
     if (id && user?.role === UserRole.DOCTOR) {
@@ -320,22 +341,43 @@ export default function PatientProfile() {
     
     // Construct Prescription HTML
     let contentHtml = '';
+    
     if (doc.type === 'prescription' && doc.content.items) {
-      contentHtml = `
-        <div class="space-y-6">
-           ${doc.content.items.map(item => `
-              <div class="mb-4">
-                 <div class="flex justify-between items-end border-b border-dotted border-slate-400 pb-1 mb-1">
-                    <span class="font-bold text-lg uppercase">${item.medication}</span>
-                    <span class="font-bold text-lg">${item.quantity}</span>
-                 </div>
-                 <div class="text-sm pl-4 italic text-slate-700">${item.dosage}</div>
-              </div>
-           `).join('')}
+      // Group by Usage Mode
+      const groupedItems: Record<string, PrescriptionItem[]> = {};
+      
+      doc.content.items.forEach(item => {
+        const mode = item.usageMode || 'Uso Geral';
+        if (!groupedItems[mode]) {
+          groupedItems[mode] = [];
+        }
+        groupedItems[mode].push(item);
+      });
+
+      // Generate HTML for groups
+      contentHtml = Object.entries(groupedItems).map(([mode, items]) => `
+        <div style="margin-bottom: 25px; page-break-inside: avoid;">
+          <div style="text-align: center; font-weight: bold; text-transform: uppercase; margin-bottom: 15px; font-size: 14px; text-decoration: underline; color: #1e3a8a;">
+             ${mode}
+          </div>
+          <div class="space-y-4">
+             ${items.map(item => `
+                <div class="mb-6">
+                   <div class="flex items-end text-lg font-bold uppercase text-slate-900">
+                      <span style="flex-shrink: 0; padding-right: 5px;">${item.medication}</span>
+                      <span style="flex-grow: 1; border-bottom: 2px dotted #94a3b8; margin: 0 5px; position: relative; top: -5px;"></span>
+                      <span style="flex-shrink: 0; padding-left: 5px;">${item.quantity}</span>
+                   </div>
+                   <div class="text-sm pl-0 mt-2 text-slate-700 font-medium" style="line-height: 1.4;">${item.dosage}</div>
+                </div>
+             `).join('')}
+          </div>
         </div>
-      `;
+      `).join('');
+
     } else if (doc.type === 'referral') {
-       contentHtml = `<div class="text-justify leading-relaxed whitespace-pre-wrap">${doc.content.text}</div>`;
+       // Rich Text is already HTML
+       contentHtml = `<div class="prose max-w-none text-justify leading-relaxed whitespace-pre-wrap text-base font-medium text-slate-800">${doc.content.text}</div>`;
     }
 
     const html = `
@@ -346,56 +388,112 @@ export default function PatientProfile() {
         <title>${doc.type === 'prescription' ? 'Receituário' : 'Encaminhamento'} - ${patient.name}</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
-           body { font-family: sans-serif; position: relative; min-height: 100vh; margin: 0; padding: 0; }
-           .page { position: relative; padding: 2cm; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; }
+           @page { 
+             size: A4; 
+             margin: 0;
+           }
+           body { 
+             margin: 0; 
+             padding: 0; 
+             font-family: 'Inter', sans-serif; 
+             -webkit-print-color-adjust: exact; 
+             background: white; 
+           }
+           
+           /* Fixed Elements (Repeat on every page) */
            .watermark {
-             position: absolute;
-             top: 50%;
-             left: 50%;
+             position: fixed;
+             top: 50%; left: 50%;
              transform: translate(-50%, -50%);
              width: 60%;
-             opacity: 0.2; 
+             opacity: 0.10; 
              z-index: 0;
              pointer-events: none;
            }
-           .content { position: relative; z-index: 10; flex: 1; }
-           .footer { margin-top: auto; text-align: center; font-size: 10px; color: #1e3a8a; } /* Blue-900 */
+           .header-fixed {
+             position: fixed;
+             top: 0; left: 0; right: 0;
+             height: 3.5cm;
+             background: white;
+             z-index: 10;
+             padding: 1cm 2cm 0 2cm;
+             display: flex;
+             align-items: center;
+             gap: 1.5rem;
+           }
+           .footer-fixed {
+             position: fixed;
+             bottom: 0; left: 0; right: 0;
+             height: 2.5cm;
+             background: white;
+             z-index: 10;
+             text-align: center;
+             font-size: 10px;
+             color: #1e3a8a; /* Blue-900 */
+             font-weight: bold;
+             padding: 0.5cm 2cm 1cm 2cm;
+             display: flex;
+             flex-direction: column;
+             justify-content: flex-end;
+           }
+
+           /* Content Flow */
+           .content-wrap {
+             /* Reserve space for Header and Footer to prevent overlap */
+             padding-top: 4cm; 
+             padding-bottom: 3.5cm; /* Ensure content doesn't hit the footer */
+             padding-left: 2cm;
+             padding-right: 2cm;
+             position: relative;
+             z-index: 5;
+           }
+           
+           .signature-box {
+              margin-top: 2cm; /* Ensure separation from text */
+              display: flex;
+              justify-content: center;
+              page-break-inside: avoid; /* Don't split signature */
+           }
+
+           /* Typography Tweaks */
+           h3 { margin-top: 0; }
+           .prose p { margin-bottom: 0.5em; }
         </style>
       </head>
       <body>
-        <div class="page">
-           <img src="${HEADER_LOGO_URL}" class="watermark" />
-           
-           <!-- Header -->
-           <div class="flex items-center gap-4 mb-12 content">
-              <img src="${HEADER_LOGO_URL}" class="h-20 w-auto" />
-              <div>
-                 <h1 class="text-2xl font-bold text-slate-900 uppercase tracking-widest">${doc.type === 'prescription' ? 'Receituário' : 'Encaminhamento'}</h1>
-                 <p class="text-sm">Paciente: <b>${patient.name}</b></p>
-                 <p class="text-sm">Idade: ${calculateAge(patient.dob)} - Data: ${docDate}</p>
-              </div>
+        <!-- Repeated Watermark -->
+        <img src="${HEADER_LOGO_URL}" class="watermark" />
+        
+        <!-- Repeated Header -->
+        <div class="header-fixed">
+           <img src="${HEADER_LOGO_URL}" class="h-20 w-auto object-contain" />
+           <div>
+              <h1 class="text-2xl font-bold text-slate-900 uppercase tracking-widest">${doc.type === 'prescription' ? 'Receituário' : 'Encaminhamento'}</h1>
+              <p class="text-sm text-slate-600">Paciente: <b class="text-slate-900 uppercase">${patient.name}</b></p>
+              <p class="text-sm text-slate-600">Idade: ${calculateAge(patient.dob)} • Data: ${docDate}</p>
            </div>
+        </div>
 
-           <!-- Content -->
-           <div class="content pl-4 pr-4">
-              ${contentHtml}
-           </div>
+        <!-- Repeated Footer -->
+        <div class="footer-fixed">
+           <p>Av. José Veríssimo, 752 - Maurício de Nassau</p>
+           <p>Fones: (81) 3727-7250 | 9 9642-0590 (Recepção) | 9 9102-5771 (Autorização) | 9 7328-0845 (Financeiro)</p>
+           <p>CEP 55.014-250 - Caruaru - PE</p>
+        </div>
 
-           <!-- Signature -->
-           <div class="content mt-12 mb-8 flex justify-center">
-              <div class="text-center border-t border-slate-800 pt-2 w-64">
+        <!-- Flowing Content -->
+        <div class="content-wrap">
+           ${contentHtml}
+
+           <!-- Signature Block (Flows with text, avoids break, always at end of content) -->
+           <div class="signature-box">
+              <div class="text-center border-t border-slate-800 pt-2 px-12 min-w-[300px]">
                  <p class="font-bold text-slate-900">Dr. ${user.name}</p>
                  <p class="text-sm text-slate-600">CRM: ${user.crm || ''}</p>
               </div>
            </div>
-
-           <!-- Footer -->
-           <div class="footer font-bold">
-              <p>Av. José Veríssimo, 752 - Maurício de Nassau</p>
-              <p>Fones: (81) 3727-7250 | 9 9642-0590 (Recepção) | 9 9102-5771 (Autorização) | 9 7328-0845 (Financeiro)</p>
-              <p>CEP 55.014-250 - Caruaru - PE</p>
-           </div>
         </div>
+        
         <script>
            ${!preview ? 'window.onload = () => window.print();' : ''}
         </script>
@@ -437,7 +535,7 @@ export default function PatientProfile() {
       {/* --- DOCUMENT MODAL --- */}
       {showDocModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col animate-scale-in">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-scale-in">
               <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
                  <h3 className="font-bold text-slate-800">Novo Documento</h3>
                  <button onClick={() => setShowDocModal(false)}><X size={20} className="text-slate-400 hover:text-red-500"/></button>
@@ -459,51 +557,113 @@ export default function PatientProfile() {
                  </div>
 
                  {docType === 'prescription' ? (
-                   <div className="space-y-4">
+                   <div className="space-y-6">
                       {prescriptionItems.map((item, idx) => (
-                        <div key={idx} className="flex gap-2 items-start bg-slate-50 p-3 rounded-lg border border-slate-100 group">
-                           <div className="flex-1 grid grid-cols-4 gap-2">
-                              <div className="col-span-3">
-                                 <input placeholder="Nome da Medicação (ex: Dipirona 500mg)" className="w-full p-2 text-sm border rounded" value={item.medication} onChange={e => {
-                                    const newItems = [...prescriptionItems];
-                                    newItems[idx].medication = e.target.value;
-                                    setPrescriptionItems(newItems);
-                                 }} />
+                        <div key={idx} className="flex flex-col md:flex-row gap-2 items-start bg-slate-50 p-4 rounded-xl border border-slate-200 group shadow-sm">
+                           <div className="flex-1 grid grid-cols-1 md:grid-cols-6 gap-3 w-full">
+                              
+                              <div className="md:col-span-2">
+                                <label className="block text-xs font-bold text-slate-500 mb-1">Via de Uso</label>
+                                <div className="relative">
+                                    <select 
+                                        className="w-full p-2.5 text-sm border border-slate-300 rounded-lg appearance-none bg-white focus:ring-2 focus:ring-blue-900 outline-none"
+                                        value={USAGE_MODES.includes(item.usageMode || '') ? item.usageMode : 'Outro'}
+                                        onChange={e => {
+                                            const newItems = [...prescriptionItems];
+                                            if (e.target.value === 'Outro') {
+                                                newItems[idx].usageMode = ''; // Clear so input shows
+                                            } else {
+                                                newItems[idx].usageMode = e.target.value;
+                                            }
+                                            setPrescriptionItems(newItems);
+                                        }}
+                                    >
+                                        {USAGE_MODES.map(mode => <option key={mode} value={mode}>{mode}</option>)}
+                                    </select>
+                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
+                                </div>
+                                {/* If Custom/Empty, show input */}
+                                {(!item.usageMode || !USAGE_MODES.includes(item.usageMode)) && (
+                                    <input 
+                                        placeholder="Digite a via (ex: Uso Inalatório)" 
+                                        className="w-full mt-2 p-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none"
+                                        value={item.usageMode}
+                                        onChange={e => {
+                                            const newItems = [...prescriptionItems];
+                                            newItems[idx].usageMode = e.target.value;
+                                            setPrescriptionItems(newItems);
+                                        }}
+                                    />
+                                )}
                               </div>
-                              <div>
-                                 <input placeholder="Qtd (ex: 01 CX)" className="w-full p-2 text-sm border rounded" value={item.quantity} onChange={e => {
-                                    const newItems = [...prescriptionItems];
-                                    newItems[idx].quantity = e.target.value;
-                                    setPrescriptionItems(newItems);
-                                 }} />
+
+                              <div className="md:col-span-3">
+                                 <label className="block text-xs font-bold text-slate-500 mb-1">Medicação</label>
+                                 <input 
+                                    placeholder="Nome da Medicação (ex: Dipirona 500mg)" 
+                                    className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none" 
+                                    value={item.medication} 
+                                    onChange={e => {
+                                        const newItems = [...prescriptionItems];
+                                        newItems[idx].medication = e.target.value;
+                                        setPrescriptionItems(newItems);
+                                    }} 
+                                 />
                               </div>
-                              <div className="col-span-4">
-                                 <input placeholder="Posologia (ex: Tomar 1cp a cada 6h)" className="w-full p-2 text-sm border rounded" value={item.dosage} onChange={e => {
-                                    const newItems = [...prescriptionItems];
-                                    newItems[idx].dosage = e.target.value;
-                                    setPrescriptionItems(newItems);
-                                 }} />
+                              
+                              <div className="md:col-span-1">
+                                 <label className="block text-xs font-bold text-slate-500 mb-1">Qtd</label>
+                                 <input 
+                                    placeholder="Ex: 1 CX" 
+                                    className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none" 
+                                    value={item.quantity} 
+                                    onChange={e => {
+                                        const newItems = [...prescriptionItems];
+                                        newItems[idx].quantity = e.target.value;
+                                        setPrescriptionItems(newItems);
+                                    }} 
+                                 />
+                              </div>
+                              
+                              <div className="md:col-span-6">
+                                 <label className="block text-xs font-bold text-slate-500 mb-1">Posologia / Modo de Uso</label>
+                                 <textarea 
+                                    rows={2}
+                                    placeholder="Ex: Tomar 1cp a cada 6h se houver dor ou febre." 
+                                    className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none resize-none" 
+                                    value={item.dosage} 
+                                    onChange={e => {
+                                        const newItems = [...prescriptionItems];
+                                        newItems[idx].dosage = e.target.value;
+                                        setPrescriptionItems(newItems);
+                                    }} 
+                                 />
                               </div>
                            </div>
-                           <button onClick={() => setPrescriptionItems(prev => prev.filter((_, i) => i !== idx))} className="p-2 text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
+                           <button onClick={() => setPrescriptionItems(prev => prev.filter((_, i) => i !== idx))} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors mt-6"><Trash2 size={18}/></button>
                         </div>
                       ))}
-                      <button onClick={() => setPrescriptionItems([...prescriptionItems, {medication: '', quantity: '', dosage: ''}])} className="text-blue-600 text-sm font-bold hover:underline flex items-center gap-1">
-                         <PlusCircle size={14}/> Adicionar Item
+                      
+                      <button onClick={() => setPrescriptionItems([...prescriptionItems, {medication: '', quantity: '', dosage: '', usageMode: 'Uso Oral'}])} className="w-full py-3 border-2 border-dashed border-blue-200 rounded-xl text-blue-600 font-bold hover:bg-blue-50 transition-colors flex items-center justify-center gap-2">
+                         <PlusCircle size={18}/> Adicionar Item à Receita
                       </button>
                    </div>
                  ) : (
-                   <textarea 
-                     className="w-full h-48 border rounded-lg p-3 text-sm" 
-                     placeholder="Descreva o encaminhamento..."
-                     value={referralText}
-                     onChange={e => setReferralText(e.target.value)}
-                   />
+                   <div className="h-[400px]">
+                      <RichTextEditor 
+                        value={referralText}
+                        onChange={setReferralText}
+                        placeholder="Descreva o encaminhamento, motivo, especialidade e observações clínicas..."
+                        colorTheme="blue"
+                      />
+                   </div>
                  )}
               </div>
               <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 rounded-b-2xl">
                  <button onClick={() => setShowDocModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">Cancelar</button>
-                 <button onClick={handleSaveDocument} className="px-6 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-800 shadow-lg shadow-blue-900/20 font-medium">Salvar e Imprimir</button>
+                 <button onClick={handleSaveDocument} className="px-6 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-800 shadow-lg shadow-blue-900/20 font-medium flex items-center gap-2">
+                    <Printer size={18} /> Salvar e Imprimir
+                 </button>
               </div>
            </div>
         </div>
@@ -784,7 +944,7 @@ export default function PatientProfile() {
                           <button 
                              onClick={() => {
                                 setShowDocModal(true);
-                                setPrescriptionItems([{ medication: '', quantity: '', dosage: '' }]);
+                                setPrescriptionItems([{ medication: '', quantity: '', dosage: '', usageMode: 'Uso Oral' }]);
                                 setReferralText('');
                              }} 
                              className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:border-blue-900 hover:text-blue-900 transition-all font-bold flex items-center justify-center gap-2"
