@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../supabaseClient';
-import { Patient, Anamnesis, UserRole } from '../types';
+import { Patient, Anamnesis, UserRole, MedicalDocument, PrescriptionItem } from '../types';
 import { useAuth } from '../App';
-import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader, Eye, X, Upload, Check } from 'lucide-react';
+import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader, Eye, X, Upload, Check, FilePlus, ScrollText, MapPin } from 'lucide-react';
 import { useDialog } from '../components/Dialog';
 
 export default function PatientProfile() {
@@ -13,11 +14,18 @@ export default function PatientProfile() {
   const dialog = useDialog();
   const [patient, setPatient] = useState<Patient | null>(null);
   const [history, setHistory] = useState<Anamnesis[]>([]);
-  const [activeTab, setActiveTab] = useState<'details' | 'anamnesis'>('details');
+  const [documents, setDocuments] = useState<MedicalDocument[]>([]);
+  const [activeTab, setActiveTab] = useState<'details' | 'anamnesis' | 'documents'>('details');
   const [loadingDelete, setLoadingDelete] = useState<string | null>(null);
   
   // View Modal State
   const [viewAnamnesis, setViewAnamnesis] = useState<Anamnesis | null>(null);
+
+  // Document Modal State
+  const [showDocModal, setShowDocModal] = useState(false);
+  const [docType, setDocType] = useState<'prescription' | 'referral'>('prescription');
+  const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItem[]>([{ medication: '', quantity: '', dosage: '' }]);
+  const [referralText, setReferralText] = useState('');
 
   // Webcam State
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -28,11 +36,15 @@ export default function PatientProfile() {
   const [anthropo, setAnthropo] = useState({ weight: '', height: '', bp_s: '', bp_d: '' });
 
   const LOGO_URL = "https://i.ibb.co/n8rLsXSJ/upscalemedia-transformed-1.png";
+  const HEADER_LOGO_URL = "https://i.ibb.co/sJR9zQKt/upscalemedia-transformed-1.png";
 
   const fetchHistory = async () => {
     if (id && user?.role === UserRole.DOCTOR) {
       const { data } = await api.getAnamneses(id);
       setHistory((data as any) || []);
+      
+      const { data: docs } = await api.getDocuments(id);
+      setDocuments((docs as any) || []);
     }
   };
 
@@ -151,9 +163,32 @@ export default function PatientProfile() {
     }
   };
 
+  const handleDeleteDocument = async (docId: string) => {
+    const confirmed = await dialog.confirm("Excluir Documento", "Deseja excluir este documento permanentemente?", "danger");
+    if (!confirmed) return;
+    
+    setLoadingDelete(docId);
+    try {
+      await api.deleteDocument(docId);
+      setDocuments(prev => prev.filter(d => d.id !== docId));
+    } catch (e) {
+      dialog.alert("Erro", "Não foi possível excluir.");
+    } finally {
+      setLoadingDelete(null);
+    }
+  };
+
   const handleEditAnamnesis = (anamnesisId: string) => {
     navigate(`/anamnesis/session/${id}?editId=${anamnesisId}`);
   };
+
+  // Helper for date formatting without timezone shift
+  const formatSafeDate = (dateStr: string) => {
+    if(!dateStr) return 'N/A';
+    const parts = dateStr.split('-');
+    if(parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return dateStr;
+  }
 
   const handlePrint = (anamnesis: Anamnesis) => {
     if (!patient) return;
@@ -165,6 +200,7 @@ export default function PatientProfile() {
 
     const docDate = new Date(anamnesis.created_at).toLocaleDateString();
     const docTime = new Date(anamnesis.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const patientDob = formatSafeDate(patient.dob);
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -205,7 +241,7 @@ export default function PatientProfile() {
           </div>
           <div>
             <span class="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Data de Nascimento</span>
-            <span class="text-base text-slate-800">${patient.dob ? new Date(patient.dob).toLocaleDateString() : 'N/A'}</span>
+            <span class="text-base text-slate-800">${patientDob}</span>
           </div>
           <div>
             <span class="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Médico Responsável</span>
@@ -268,12 +304,211 @@ export default function PatientProfile() {
     printWindow.document.close();
   };
 
+  const calculateAge = (dob: string) => {
+    if (!dob) return '';
+    const diff = Date.now() - new Date(dob).getTime();
+    const ageDate = new Date(diff);
+    return Math.abs(ageDate.getUTCFullYear() - 1970) + ' anos';
+  }
+
+  const handlePrintDocument = (doc: MedicalDocument, preview = false) => {
+    if (!patient || !user) return;
+    const printWindow = window.open('', '_blank', 'width=900,height=800');
+    if (!printWindow) return;
+
+    const docDate = new Date(doc.created_at).toLocaleDateString();
+    
+    // Construct Prescription HTML
+    let contentHtml = '';
+    if (doc.type === 'prescription' && doc.content.items) {
+      contentHtml = `
+        <div class="space-y-6">
+           ${doc.content.items.map(item => `
+              <div class="mb-4">
+                 <div class="flex justify-between items-end border-b border-dotted border-slate-400 pb-1 mb-1">
+                    <span class="font-bold text-lg uppercase">${item.medication}</span>
+                    <span class="font-bold text-lg">${item.quantity}</span>
+                 </div>
+                 <div class="text-sm pl-4 italic text-slate-700">${item.dosage}</div>
+              </div>
+           `).join('')}
+        </div>
+      `;
+    } else if (doc.type === 'referral') {
+       contentHtml = `<div class="text-justify leading-relaxed whitespace-pre-wrap">${doc.content.text}</div>`;
+    }
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <title>${doc.type === 'prescription' ? 'Receituário' : 'Encaminhamento'} - ${patient.name}</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+           body { font-family: sans-serif; position: relative; min-height: 100vh; margin: 0; padding: 0; }
+           .page { position: relative; padding: 2cm; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; }
+           .watermark {
+             position: absolute;
+             top: 50%;
+             left: 50%;
+             transform: translate(-50%, -50%);
+             width: 60%;
+             opacity: 0.2; 
+             z-index: 0;
+             pointer-events: none;
+           }
+           .content { position: relative; z-index: 10; flex: 1; }
+           .footer { margin-top: auto; text-align: center; font-size: 10px; color: #1e3a8a; } /* Blue-900 */
+        </style>
+      </head>
+      <body>
+        <div class="page">
+           <img src="${HEADER_LOGO_URL}" class="watermark" />
+           
+           <!-- Header -->
+           <div class="flex items-center gap-4 mb-12 content">
+              <img src="${HEADER_LOGO_URL}" class="h-20 w-auto" />
+              <div>
+                 <h1 class="text-2xl font-bold text-slate-900 uppercase tracking-widest">${doc.type === 'prescription' ? 'Receituário' : 'Encaminhamento'}</h1>
+                 <p class="text-sm">Paciente: <b>${patient.name}</b></p>
+                 <p class="text-sm">Idade: ${calculateAge(patient.dob)} - Data: ${docDate}</p>
+              </div>
+           </div>
+
+           <!-- Content -->
+           <div class="content pl-4 pr-4">
+              ${contentHtml}
+           </div>
+
+           <!-- Signature -->
+           <div class="content mt-12 mb-8 flex justify-center">
+              <div class="text-center border-t border-slate-800 pt-2 w-64">
+                 <p class="font-bold text-slate-900">Dr. ${user.name}</p>
+                 <p class="text-sm text-slate-600">CRM: ${user.crm || ''}</p>
+              </div>
+           </div>
+
+           <!-- Footer -->
+           <div class="footer font-bold">
+              <p>Av. José Veríssimo, 752 - Maurício de Nassau</p>
+              <p>Fones: (81) 3727-7250 | 9 9642-0590 (Recepção) | 9 9102-5771 (Autorização) | 9 7328-0845 (Financeiro)</p>
+              <p>CEP 55.014-250 - Caruaru - PE</p>
+           </div>
+        </div>
+        <script>
+           ${!preview ? 'window.onload = () => window.print();' : ''}
+        </script>
+      </body>
+      </html>
+    `;
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+
+  const handleSaveDocument = async () => {
+    if (!patient || !user) return;
+    
+    try {
+      const payload = {
+         patient_id: patient.id,
+         doctor_id: user.id,
+         type: docType,
+         content: docType === 'prescription' ? { items: prescriptionItems } : { text: referralText }
+      };
+      
+      const { data, error } = await api.createDocument(payload);
+      if (error) throw error;
+      
+      await dialog.alert("Sucesso", "Documento salvo com sucesso.");
+      setShowDocModal(false);
+      fetchHistory();
+    } catch (e) {
+      dialog.alert("Erro", "Falha ao salvar documento.");
+    }
+  };
+
   if (!patient) return <div>Carregando...</div>;
 
   const historyList = history || [];
 
   return (
     <>
+      {/* --- DOCUMENT MODAL --- */}
+      {showDocModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col animate-scale-in">
+              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
+                 <h3 className="font-bold text-slate-800">Novo Documento</h3>
+                 <button onClick={() => setShowDocModal(false)}><X size={20} className="text-slate-400 hover:text-red-500"/></button>
+              </div>
+              <div className="p-6 flex-1 overflow-y-auto">
+                 <div className="flex gap-4 mb-6">
+                    <button 
+                      onClick={() => setDocType('prescription')}
+                      className={`flex-1 py-3 rounded-lg border-2 font-bold transition-all ${docType === 'prescription' ? 'border-blue-900 bg-blue-50 text-blue-900' : 'border-slate-100 text-slate-400'}`}
+                    >
+                       Receituário Simples
+                    </button>
+                    <button 
+                      onClick={() => setDocType('referral')}
+                      className={`flex-1 py-3 rounded-lg border-2 font-bold transition-all ${docType === 'referral' ? 'border-blue-900 bg-blue-50 text-blue-900' : 'border-slate-100 text-slate-400'}`}
+                    >
+                       Encaminhamento
+                    </button>
+                 </div>
+
+                 {docType === 'prescription' ? (
+                   <div className="space-y-4">
+                      {prescriptionItems.map((item, idx) => (
+                        <div key={idx} className="flex gap-2 items-start bg-slate-50 p-3 rounded-lg border border-slate-100 group">
+                           <div className="flex-1 grid grid-cols-4 gap-2">
+                              <div className="col-span-3">
+                                 <input placeholder="Nome da Medicação (ex: Dipirona 500mg)" className="w-full p-2 text-sm border rounded" value={item.medication} onChange={e => {
+                                    const newItems = [...prescriptionItems];
+                                    newItems[idx].medication = e.target.value;
+                                    setPrescriptionItems(newItems);
+                                 }} />
+                              </div>
+                              <div>
+                                 <input placeholder="Qtd (ex: 01 CX)" className="w-full p-2 text-sm border rounded" value={item.quantity} onChange={e => {
+                                    const newItems = [...prescriptionItems];
+                                    newItems[idx].quantity = e.target.value;
+                                    setPrescriptionItems(newItems);
+                                 }} />
+                              </div>
+                              <div className="col-span-4">
+                                 <input placeholder="Posologia (ex: Tomar 1cp a cada 6h)" className="w-full p-2 text-sm border rounded" value={item.dosage} onChange={e => {
+                                    const newItems = [...prescriptionItems];
+                                    newItems[idx].dosage = e.target.value;
+                                    setPrescriptionItems(newItems);
+                                 }} />
+                              </div>
+                           </div>
+                           <button onClick={() => setPrescriptionItems(prev => prev.filter((_, i) => i !== idx))} className="p-2 text-red-400 hover:text-red-600"><Trash2 size={16}/></button>
+                        </div>
+                      ))}
+                      <button onClick={() => setPrescriptionItems([...prescriptionItems, {medication: '', quantity: '', dosage: ''}])} className="text-blue-600 text-sm font-bold hover:underline flex items-center gap-1">
+                         <PlusCircle size={14}/> Adicionar Item
+                      </button>
+                   </div>
+                 ) : (
+                   <textarea 
+                     className="w-full h-48 border rounded-lg p-3 text-sm" 
+                     placeholder="Descreva o encaminhamento..."
+                     value={referralText}
+                     onChange={e => setReferralText(e.target.value)}
+                   />
+                 )}
+              </div>
+              <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 rounded-b-2xl">
+                 <button onClick={() => setShowDocModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">Cancelar</button>
+                 <button onClick={handleSaveDocument} className="px-6 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-800 shadow-lg shadow-blue-900/20 font-medium">Salvar e Imprimir</button>
+              </div>
+           </div>
+        </div>
+      )}
+
       {/* --- VIEW MODAL (Eye Icon) --- */}
       {viewAnamnesis && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm print:hidden">
@@ -395,6 +630,20 @@ export default function PatientProfile() {
                 </div>
               </div>
 
+              {/* Address Card */}
+              {patient.address && (
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                   <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-2">
+                     <MapPin size={18} className="text-blue-900"/> Endereço
+                   </h3>
+                   <div className="text-sm text-slate-600">
+                      <p>{patient.address.street}, {patient.address.number}</p>
+                      <p>{patient.address.neighborhood} - {patient.address.city}/{patient.address.state}</p>
+                      <p className="text-xs text-slate-400 mt-1">CEP: {patient.address.cep}</p>
+                   </div>
+                </div>
+              )}
+
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 className="font-semibold text-slate-800 mb-2">Informações Sociais</h3>
                 <p className="text-sm text-slate-600 leading-relaxed italic">{patient.social_info || 'Não informado.'}</p>
@@ -417,6 +666,12 @@ export default function PatientProfile() {
                       className={`flex-1 py-4 text-sm font-bold uppercase tracking-wide transition-colors ${activeTab === 'anamnesis' ? 'bg-white text-blue-900 border-t-2 border-blue-900' : 'text-slate-400 hover:text-slate-600'}`}
                     >
                       Histórico ({historyList.length})
+                    </button>
+                    <button 
+                      onClick={() => setActiveTab('documents')}
+                      className={`flex-1 py-4 text-sm font-bold uppercase tracking-wide transition-colors ${activeTab === 'documents' ? 'bg-white text-blue-900 border-t-2 border-blue-900' : 'text-slate-400 hover:text-slate-600'}`}
+                    >
+                      Documentos ({documents.length})
                     </button>
                   </div>
     
@@ -522,6 +777,52 @@ export default function PatientProfile() {
                         ))}
                         {historyList.length === 0 && <p className="text-center text-slate-400 py-10">Nenhum histórico encontrado.</p>}
                       </div>
+                    )}
+
+                    {activeTab === 'documents' && (
+                       <div className="space-y-6">
+                          <button 
+                             onClick={() => {
+                                setShowDocModal(true);
+                                setPrescriptionItems([{ medication: '', quantity: '', dosage: '' }]);
+                                setReferralText('');
+                             }} 
+                             className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:border-blue-900 hover:text-blue-900 transition-all font-bold flex items-center justify-center gap-2"
+                          >
+                             <FilePlus size={24} /> Novo Documento
+                          </button>
+
+                          {documents.map(doc => (
+                             <div key={doc.id} className="border border-slate-200 rounded-xl p-5 hover:shadow-lg transition-all bg-white flex justify-between items-center group">
+                                <div className="flex items-center gap-4">
+                                   <div className={`p-3 rounded-lg ${doc.type === 'prescription' ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                                      <ScrollText size={24} />
+                                   </div>
+                                   <div>
+                                      <p className="font-bold text-slate-800 text-lg capitalize">{doc.type === 'prescription' ? 'Receituário' : 'Encaminhamento'}</p>
+                                      <p className="text-xs text-slate-500">Dr. {doc.doctor?.name} • {new Date(doc.created_at).toLocaleDateString()}</p>
+                                   </div>
+                                </div>
+                                <div className="flex gap-2">
+                                   <button 
+                                      onClick={() => handlePrintDocument(doc)}
+                                      className="p-2 text-slate-400 hover:text-blue-900 hover:bg-blue-50 rounded transition-colors"
+                                      title="Imprimir"
+                                   >
+                                      <Printer size={20} />
+                                   </button>
+                                   <button 
+                                      onClick={() => handleDeleteDocument(doc.id)}
+                                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                      title="Excluir"
+                                   >
+                                      {loadingDelete === doc.id ? <Loader size={20} className="animate-spin"/> : <Trash2 size={20} />}
+                                   </button>
+                                </div>
+                             </div>
+                          ))}
+                          {documents.length === 0 && <p className="text-center text-slate-400 py-4">Nenhum documento gerado.</p>}
+                       </div>
                     )}
                   </div>
                 </div>

@@ -22,15 +22,19 @@ export default function RichTextEditor({
   colorTheme = 'blue' 
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
-  const lastHtmlRef = useRef(value);
+  
+  // FIX: Initialize with empty string instead of 'value'. 
+  // This ensures that when the component mounts with data (or data arrives shortly after),
+  // the useEffect detects a mismatch ("Data" !== "") and updates the DOM.
+  const lastHtmlRef = useRef(""); 
+  
   const [showTemplates, setShowTemplates] = useState(false);
 
   // Sync external value changes to innerHTML ONLY if they come from outside (DB, Template)
-  // This prevents the cursor from jumping to start when the user is typing
   useEffect(() => {
     if (!editorRef.current) return;
 
-    // If the new prop value is different from the last value we emitted...
+    // If the new prop value is different from the last value we processed...
     if (value !== lastHtmlRef.current) {
       // And strictly different from current HTML content...
       if (editorRef.current.innerHTML !== value) {
@@ -44,8 +48,6 @@ export default function RichTextEditor({
   const handleInput = () => {
     if (editorRef.current) {
       const html = editorRef.current.innerHTML;
-      // Update our reference tracker BEFORE telling parent, so when parent updates props, 
-      // the useEffect above sees they match and skips the DOM update.
       lastHtmlRef.current = html; 
       onChange(html);
     }
@@ -140,7 +142,7 @@ export default function RichTextEditor({
         style={{ whiteSpace: 'pre-wrap' }}
       />
       
-      {/* Placeholder logic (CSS based mostly, but handled conditionally here for clarity) */}
+      {/* Placeholder logic */}
       {!value && (
         <div className="absolute top-[52px] left-6 text-slate-300 text-sm pointer-events-none select-none">
           {placeholder}

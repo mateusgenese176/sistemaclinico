@@ -14,6 +14,16 @@ export interface User {
   created_at?: string;
 }
 
+export interface Address {
+  cep: string;
+  street: string;
+  number: string;
+  complement?: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+}
+
 export interface Patient {
   id: string;
   name: string;
@@ -21,6 +31,7 @@ export interface Patient {
   cpf: string;
   contact: string;
   social_info: string;
+  address?: Address; // New Address field
   tags?: string[]; // stored as text[] in supabase
   anthropometrics?: Anthropometrics;
   photo_url?: string; // Base64 string or URL
@@ -59,6 +70,25 @@ export interface Anamnesis {
     p: string;
   };
   status: 'draft' | 'final';
+  created_at: string;
+  doctor?: User;
+}
+
+export interface PrescriptionItem {
+  medication: string;
+  quantity: string;
+  dosage: string;
+}
+
+export interface MedicalDocument {
+  id: string;
+  patient_id: string;
+  doctor_id: string;
+  type: 'prescription' | 'referral'; // Receituário ou Encaminhamento
+  content: {
+    items?: PrescriptionItem[]; // Para receituário
+    text?: string; // Para encaminhamento
+  }; 
   created_at: string;
   doctor?: User;
 }

@@ -35,9 +35,34 @@ export default function Dashboard() {
   // Blindagem de array
   const safeAppointments = appointments || [];
 
+  // Logic to find Next Appointment (Time > Current Time)
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const nextApt = safeAppointments
+    .filter(a => a.status === 'scheduled')
+    .filter(a => {
+        const [h, m] = a.start_time.split(':').map(Number);
+        return (h * 60 + m) > currentMinutes;
+    })
+    .sort((a, b) => a.start_time.localeCompare(b.start_time))[0];
+
   const stats = [
     { label: 'Pacientes Hoje', value: safeAppointments.length, icon: Users, color: 'bg-blue-500' },
-    { label: 'Próxima Consulta', value: safeAppointments.find(a => a.status === 'scheduled')?.start_time || '--:--', icon: Clock, color: 'bg-purple-500' },
+    { 
+      label: 'Próximo Atendimento', 
+      value: nextApt ? (
+        <div className="flex flex-col items-start mt-1">
+          <span className="text-xl font-bold">{nextApt.start_time}</span>
+          <span className="text-sm font-normal text-slate-600 truncate max-w-[180px]">{nextApt.patient?.name}</span>
+          <span className="text-[10px] text-slate-400 font-normal mt-0.5">{new Date().toLocaleDateString('pt-BR')}</span>
+        </div>
+      ) : (
+        <span className="text-slate-400 text-lg">Sem mais atendimentos hoje</span>
+      ), 
+      icon: Clock, 
+      color: 'bg-purple-500' 
+    },
   ];
 
   return (
@@ -80,13 +105,13 @@ export default function Dashboard() {
         </div>
         
         {stats.map((stat, i) => (
-          <div key={i} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-            <div className={`p-3 rounded-lg text-white ${stat.color}`}>
+          <div key={i} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-start gap-4">
+            <div className={`p-3 rounded-lg text-white mt-1 ${stat.color}`}>
               <stat.icon size={24} />
             </div>
             <div>
               <p className="text-sm text-slate-500 font-medium">{stat.label}</p>
-              <p className="text-xl font-bold text-slate-900">{stat.value}</p>
+              <div className="text-slate-900 font-bold">{stat.value}</div>
             </div>
           </div>
         ))}

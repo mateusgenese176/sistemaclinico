@@ -29,6 +29,7 @@ create table if not exists patients (
   social_info text,
   tags text[],
   anthropometrics jsonb default '{}'::jsonb,
+  address jsonb default '{}'::jsonb,
   photo_url text,
   created_at timestamptz default now()
 );
@@ -39,6 +40,9 @@ begin
   if not exists (select 1 from information_schema.columns where table_name='patients' and column_name='photo_url') then 
     alter table patients add column photo_url text; 
   end if; 
+  if not exists (select 1 from information_schema.columns where table_name='patients' and column_name='address') then 
+    alter table patients add column address jsonb default '{}'::jsonb; 
+  end if;
   if not exists (select 1 from information_schema.columns where table_name='anamneses' and column_name='status') then 
     alter table anamneses add column status text default 'final'; 
   end if;
@@ -77,6 +81,15 @@ create table if not exists anamneses (
   doctor_id uuid references users(id) on delete cascade,
   soap jsonb not null,
   status text default 'final',
+  created_at timestamptz default now()
+);
+
+create table if not exists documents (
+  id uuid default gen_random_uuid() primary key,
+  patient_id uuid references patients(id) on delete cascade,
+  doctor_id uuid references users(id) on delete cascade,
+  type text not null, -- 'prescription' or 'referral'
+  content jsonb not null,
   created_at timestamptz default now()
 );
 
@@ -127,6 +140,10 @@ alter table anamneses enable row level security;
 drop policy if exists "Public access anamneses" on anamneses;
 create policy "Public access anamneses" on anamneses for all using (true);
 
+alter table documents enable row level security;
+drop policy if exists "Public access documents" on documents;
+create policy "Public access documents" on documents for all using (true);
+
 alter table messages enable row level security;
 drop policy if exists "Public access messages" on messages;
 create policy "Public access messages" on messages for all using (true);
@@ -143,6 +160,7 @@ begin
   delete from messages where sender_id = target_id or receiver_id = target_id;
   delete from appointments where doctor_id = target_id;
   delete from anamneses where doctor_id = target_id;
+  delete from documents where doctor_id = target_id;
   delete from users where id = target_id;
 end;
 $$ language plpgsql security definer;
@@ -152,6 +170,7 @@ returns void as $$
 begin
   delete from appointments where patient_id = target_id;
   delete from anamneses where patient_id = target_id;
+  delete from documents where patient_id = target_id;
   delete from patients where id = target_id;
 end;
 $$ language plpgsql security definer;
@@ -178,6 +197,7 @@ export const api = {
       await supabase.from('messages').delete().or(`sender_id.eq.${id},receiver_id.eq.${id}`);
       await supabase.from('appointments').delete().eq('doctor_id', id);
       await supabase.from('anamneses').delete().eq('doctor_id', id);
+      await supabase.from('documents').delete().eq('doctor_id', id);
       return await supabase.from('users').delete().eq('id', id);
     }
     return { error };
@@ -195,6 +215,7 @@ export const api = {
        console.warn("RPC delete failed, trying manual...", error);
        await supabase.from('appointments').delete().eq('patient_id', id);
        await supabase.from('anamneses').delete().eq('patient_id', id);
+       await supabase.from('documents').delete().eq('patient_id', id);
        return await supabase.from('patients').delete().eq('id', id);
      }
      return { error };
@@ -231,6 +252,16 @@ export const api = {
   createAnamnesis: async (data: any) => supabase.from('anamneses').insert(data).select(), 
   updateAnamnesis: async (id: string, data: any) => supabase.from('anamneses').update(data).eq('id', id),
   deleteAnamnesis: async (id: string) => supabase.from('anamneses').delete().eq('id', id),
+
+  // Documents
+  getDocuments: async (patientId: string) => 
+    supabase.from('documents')
+      .select('*, doctor:users(name, crm)')
+      .eq('patient_id', patientId)
+      .order('created_at', { ascending: false }),
+  
+  createDocument: async (data: any) => supabase.from('documents').insert(data),
+  deleteDocument: async (id: string) => supabase.from('documents').delete().eq('id', id),
 
   // Chat
   getMessages: async (user1: string, user2: string) => {

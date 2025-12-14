@@ -10,7 +10,8 @@ export default function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  // CHANGE: Default view mode set to 'list'
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
   const navigate = useNavigate();
   const dialog = useDialog();
 

@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { api } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Camera, Upload, AlertCircle, X, Check } from 'lucide-react';
+import { ArrowLeft, Camera, Upload, AlertCircle, X, Check, MapPin, Search } from 'lucide-react';
 
 export default function PatientCreate() {
   const navigate = useNavigate();
@@ -12,10 +12,68 @@ export default function PatientCreate() {
     name: '', cpf: '', contact: '', dob: '', social_info: '', photo_url: '' 
   });
   
+  // Address State
+  const [address, setAddress] = useState({
+    cep: '',
+    street: '',
+    number: '',
+    complement: '',
+    neighborhood: '',
+    city: '',
+    state: ''
+  });
+  const [loadingCep, setLoadingCep] = useState(false);
+  
   // Webcam State
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+
+  // Masks
+  const maskCPF = (value: string) => {
+    return value
+      .replace(/\D/g, '')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})/, '$1-$2')
+      .replace(/(-\d{2})\d+?$/, '$1');
+  };
+
+  const maskPhone = (value: string) => {
+    return value
+      .replace(/\D/g, '')
+      .replace(/(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{5})(\d)/, '$1-$2')
+      .replace(/(-\d{4})\d+?$/, '$1');
+  };
+
+  const maskCEP = (value: string) => {
+    return value.replace(/\D/g, '').replace(/(\d{5})(\d)/, '$1-$2').substring(0, 9);
+  };
+
+  const handleCepBlur = async () => {
+    const cep = address.cep.replace(/\D/g, '');
+    if (cep.length === 8) {
+      setLoadingCep(true);
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await res.json();
+        if (!data.erro) {
+          setAddress(prev => ({
+            ...prev,
+            street: data.logradouro,
+            neighborhood: data.bairro,
+            city: data.localidade,
+            state: data.uf
+          }));
+        }
+      } catch (e) {
+        console.error("Erro CEP", e);
+      } finally {
+        setLoadingCep(false);
+      }
+    }
+  };
 
   const startCamera = async () => {
     try {
@@ -67,7 +125,8 @@ export default function PatientCreate() {
         social_info: newP.social_info,
         photo_url: newP.photo_url || null,
         tags: [],
-        anthropometrics: {}
+        anthropometrics: {},
+        address: address
       };
 
       const { error: apiError } = await api.createPatient(payload);
@@ -171,7 +230,10 @@ export default function PatientCreate() {
               <label className="block text-sm font-medium text-slate-700 mb-1">CPF</label>
               <input 
                 className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none transition-all" 
-                value={newP.cpf} onChange={e => setNewP({...newP, cpf: e.target.value})} placeholder="000.000.000-00"
+                value={newP.cpf} 
+                onChange={e => setNewP({...newP, cpf: maskCPF(e.target.value)})} 
+                placeholder="000.000.000-00"
+                maxLength={14}
               />
             </div>
             <div>
@@ -185,9 +247,74 @@ export default function PatientCreate() {
               <label className="block text-sm font-medium text-slate-700 mb-1">Contato</label>
               <input 
                 className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none transition-all" 
-                value={newP.contact} onChange={e => setNewP({...newP, contact: e.target.value})} placeholder="(00) 00000-0000"
+                value={newP.contact} 
+                onChange={e => setNewP({...newP, contact: maskPhone(e.target.value)})} 
+                placeholder="(81) 9.9999-9999"
+                maxLength={16}
               />
             </div>
+
+            {/* Address Section */}
+            <div className="md:col-span-2 border-t border-slate-100 pt-4 mt-2">
+               <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2"><MapPin size={18} className="text-blue-900"/> Endereço</h3>
+               <div className="grid grid-cols-6 gap-4">
+                  <div className="col-span-2">
+                     <label className="block text-sm font-medium text-slate-700 mb-1">CEP</label>
+                     <div className="relative">
+                        <input 
+                          className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none transition-all" 
+                          value={address.cep} 
+                          onChange={e => setAddress({...address, cep: maskCEP(e.target.value)})} 
+                          onBlur={handleCepBlur}
+                          placeholder="00000-000"
+                        />
+                        {loadingCep && <div className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-blue-900"><Search size={14}/></div>}
+                     </div>
+                  </div>
+                  <div className="col-span-4">
+                     <label className="block text-sm font-medium text-slate-700 mb-1">Rua / Logradouro</label>
+                     <input 
+                       className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none transition-all" 
+                       value={address.street} 
+                       onChange={e => setAddress({...address, street: e.target.value})} 
+                     />
+                  </div>
+                  <div className="col-span-2">
+                     <label className="block text-sm font-medium text-slate-700 mb-1">Número</label>
+                     <input 
+                       className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none transition-all" 
+                       value={address.number} 
+                       onChange={e => setAddress({...address, number: e.target.value})} 
+                     />
+                  </div>
+                  <div className="col-span-4">
+                     <label className="block text-sm font-medium text-slate-700 mb-1">Bairro</label>
+                     <input 
+                       className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none transition-all" 
+                       value={address.neighborhood} 
+                       onChange={e => setAddress({...address, neighborhood: e.target.value})} 
+                     />
+                  </div>
+                  <div className="col-span-4">
+                     <label className="block text-sm font-medium text-slate-700 mb-1">Cidade</label>
+                     <input 
+                       className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none transition-all" 
+                       value={address.city} 
+                       onChange={e => setAddress({...address, city: e.target.value})} 
+                     />
+                  </div>
+                  <div className="col-span-2">
+                     <label className="block text-sm font-medium text-slate-700 mb-1">UF</label>
+                     <input 
+                       className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none transition-all" 
+                       value={address.state} 
+                       onChange={e => setAddress({...address, state: e.target.value})} 
+                       maxLength={2}
+                     />
+                  </div>
+               </div>
+            </div>
+
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1">Informações Sociais</label>
               <textarea rows={4} 

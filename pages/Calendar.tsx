@@ -125,6 +125,14 @@ export default function CalendarPage() {
       }
   };
 
+  // Helper to safely format YYYY-MM-DD to DD/MM/YYYY without timezone shift
+  const formatSafeDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    return dateStr;
+  };
+
   const printAppointmentConfirmation = (apt: Appointment, e: React.MouseEvent) => {
     e.stopPropagation();
     const printWindow = window.open('', '_blank', 'width=800,height=600');
@@ -133,8 +141,9 @@ export default function CalendarPage() {
       return;
     }
 
-    const docDate = new Date().toLocaleDateString();
-    const aptDate = new Date(apt.date).toLocaleDateString();
+    const docDate = new Date().toLocaleDateString('pt-BR');
+    // FIX: Use safe formatter instead of new Date() for appointment date
+    const aptDate = formatSafeDate(apt.date);
     const aptTime = apt.start_time;
     const doctorName = (doctors || []).find(d => d.id === apt.doctor_id)?.name || 'Médico Responsável';
     const attendantName = user?.name || 'Atendente';
