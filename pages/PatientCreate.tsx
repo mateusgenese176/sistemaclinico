@@ -1,5 +1,4 @@
-
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { api } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Camera, Upload, AlertCircle, X, Check, MapPin, Search } from 'lucide-react';
@@ -80,9 +79,7 @@ export default function PatientCreate() {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
       setStream(mediaStream);
       setIsCameraOpen(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
+      // Removed direct videoRef setting here to avoid race condition with render
     } catch (e) {
       alert("Não foi possível acessar a câmera. Verifique as permissões.");
     }
@@ -95,6 +92,13 @@ export default function PatientCreate() {
     }
     setIsCameraOpen(false);
   };
+
+  // Connect stream to video element when available
+  useEffect(() => {
+    if (isCameraOpen && stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [isCameraOpen, stream]);
 
   const capturePhoto = () => {
     if (videoRef.current) {

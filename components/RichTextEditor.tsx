@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bold, Italic, List, AlignLeft, FilePlus, ChevronDown } from 'lucide-react';
+import { Bold, Italic, List, AlignLeft, AlignCenter, AlignRight, AlignJustify, FilePlus, ChevronDown } from 'lucide-react';
 
 interface Template {
   label: string;
@@ -23,9 +23,6 @@ export default function RichTextEditor({
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   
-  // FIX: Initialize with empty string instead of 'value'. 
-  // This ensures that when the component mounts with data (or data arrives shortly after),
-  // the useEffect detects a mismatch ("Data" !== "") and updates the DOM.
   const lastHtmlRef = useRef(""); 
   
   const [showTemplates, setShowTemplates] = useState(false);
@@ -34,13 +31,10 @@ export default function RichTextEditor({
   useEffect(() => {
     if (!editorRef.current) return;
 
-    // If the new prop value is different from the last value we processed...
     if (value !== lastHtmlRef.current) {
-      // And strictly different from current HTML content...
       if (editorRef.current.innerHTML !== value) {
-         // It means it's an external update (e.g. loaded from DB or Template inserted)
          editorRef.current.innerHTML = value;
-         lastHtmlRef.current = value; // Sync ref
+         lastHtmlRef.current = value;
       }
     }
   }, [value]);
@@ -91,13 +85,31 @@ export default function RichTextEditor({
   return (
     <div className={`border rounded-xl bg-white overflow-hidden transition-all focus-within:ring-4 ${themeColors[colorTheme]}`}>
       {/* Toolbar */}
-      <div className="flex items-center gap-1 p-2 border-b border-slate-100 bg-slate-50/50">
+      <div className="flex items-center gap-1 p-2 border-b border-slate-100 bg-slate-50/50 flex-wrap">
         <button onClick={() => execCommand('bold')} className={buttonClass} title="Negrito">
           <Bold size={16} />
         </button>
         <button onClick={() => execCommand('italic')} className={buttonClass} title="Itálico">
           <Italic size={16} />
         </button>
+        
+        <div className="w-px h-4 bg-slate-300 mx-1"></div>
+        
+        <button onClick={() => execCommand('justifyLeft')} className={buttonClass} title="Alinhar à Esquerda">
+          <AlignLeft size={16} />
+        </button>
+        <button onClick={() => execCommand('justifyCenter')} className={buttonClass} title="Centralizar">
+          <AlignCenter size={16} />
+        </button>
+        <button onClick={() => execCommand('justifyRight')} className={buttonClass} title="Alinhar à Direita">
+          <AlignRight size={16} />
+        </button>
+        <button onClick={() => execCommand('justifyFull')} className={buttonClass} title="Justificar">
+          <AlignJustify size={16} />
+        </button>
+
+        <div className="w-px h-4 bg-slate-300 mx-1"></div>
+
         <button onClick={() => execCommand('insertUnorderedList')} className={buttonClass} title="Lista">
           <List size={16} />
         </button>

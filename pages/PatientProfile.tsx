@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../supabaseClient';
@@ -85,6 +84,13 @@ export default function PatientProfile() {
     };
   }, [stream]);
 
+  // Connect stream to video element when camera is open and element exists
+  useEffect(() => {
+    if (isCameraOpen && stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [isCameraOpen, stream]);
+
   const handleUpdateBio = async () => {
     if (!id || !patient) return;
     
@@ -138,11 +144,9 @@ export default function PatientProfile() {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
       setStream(mediaStream);
       setIsCameraOpen(true);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
+      // The useEffect above will handle attaching srcObject
     } catch (e) {
-      dialog.alert("Erro", "Não foi possível acessar a câmera.");
+      dialog.alert("Erro", "Não foi possível acessar a câmera. Verifique as permissões.");
     }
   };
 
@@ -441,15 +445,19 @@ export default function PatientProfile() {
            .content-wrap {
              /* Reserve space for Header and Footer to prevent overlap */
              padding-top: 4cm; 
-             padding-bottom: 3.5cm; /* Ensure content doesn't hit the footer */
+             padding-bottom: 3cm; 
              padding-left: 2cm;
              padding-right: 2cm;
              position: relative;
              z-index: 5;
+             display: flex;
+             flex-direction: column;
+             min-height: 25cm; /* Ensure it takes up roughly full page minus margins to push signature down */
            }
            
            .signature-box {
-              margin-top: 2cm; /* Ensure separation from text */
+              margin-top: auto; /* This pushes the signature to the bottom of the flex container */
+              padding-top: 2cm; /* Ensure separation from text */
               display: flex;
               justify-content: center;
               page-break-inside: avoid; /* Don't split signature */
@@ -483,7 +491,9 @@ export default function PatientProfile() {
 
         <!-- Flowing Content -->
         <div class="content-wrap">
-           ${contentHtml}
+           <div>
+             ${contentHtml}
+           </div>
 
            <!-- Signature Block (Flows with text, avoids break, always at end of content) -->
            <div class="signature-box">
