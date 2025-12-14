@@ -1,8 +1,7 @@
-
 import React, { useState, useEffect } from 'react';
 import { api } from '../supabaseClient';
 import { Appointment, Patient, User } from '../types';
-import { ChevronLeft, ChevronRight, Plus, User as UserIcon, AlertCircle, Trash2, Edit2, Search, Printer, DollarSign } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, User as UserIcon, AlertCircle, Trash2, Edit2, Search, Printer, DollarSign, Calendar as CalendarIcon, Clock } from 'lucide-react';
 import { useAuth } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { useDialog } from '../components/Dialog';
@@ -11,8 +10,13 @@ export default function CalendarPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const dialog = useDialog();
+  
+  // States
   const [date, setDate] = useState(new Date());
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [viewMode, setViewMode] = useState<'day' | 'month'>('day'); // Toggle view
+  const [appointments, setAppointments] = useState<Appointment[]>([]); // Current view appointments
+  const [monthAppointments, setMonthAppointments] = useState<Appointment[]>([]); // For calendar indicators
+  
   const [doctors, setDoctors] = useState<User[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState<string>('all');
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -47,14 +51,104 @@ export default function CalendarPage() {
     api.getPatients().then(({ data }) => {
         setPatients((data as Patient[]) || []);
     });
-  }, [date]);
+  }, [date, viewMode]); // Re-fetch when date or mode changes
 
   const fetchData = async () => {
-    const dateStr = date.toISOString().split('T')[0];
-    const { data } = await api.getAppointments(dateStr);
-    setAppointments((data as Appointment[]) || []);
+    if (viewMode === 'day') {
+        const dateStr = date.toISOString().split('T')[0];
+        const { data } = await api.getAppointments(dateStr);
+        setAppointments((data as Appointment[]) || []);
+    } else {
+        // In month view, we fetch broadly to show indicators
+        // For optimization, we could fetch range, but getAppointments() gets all if no date provided
+        // We will filter client side for the month dots
+        const { data } = await api.getAppointments();
+        setMonthAppointments((data as Appointment[]) || []);
+    }
   };
 
+  const handleNavigate = (direction: 'prev' | 'next') => {
+    const newDate = new Date(date);
+    if (viewMode === 'day') {
+        newDate.setDate(date.getDate() + (direction === 'next' ? 1 : -1));
+    } else {
+        newDate.setMonth(date.getMonth() + (direction === 'next' ? 1 : -1));
+    }
+    setDate(newDate);
+  };
+
+  const handleDayClick = (day: number) => {
+    const newDate = new Date(date.getFullYear(), date.getMonth(), day);
+    setDate(newDate);
+    setViewMode('day');
+  };
+
+  // --- CALENDAR LOGIC ---
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay(); // 0 = Sunday
+
+  const renderCalendarGrid = () => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const daysInMonth = getDaysInMonth(year, month);
+    const startDay = getFirstDayOfMonth(year, month);
+    
+    const days = [];
+    // Empty slots for previous month
+    for (let i = 0; i < startDay; i++) {
+      days.push(<div key={`empty-${i}`} className="bg-slate-50/50 border border-transparent"></div>);
+    }
+
+    // Days
+    for (let i = 1; i <= daysInMonth; i++) {
+      const currentDayDate = new Date(year, month, i);
+      const isToday = new Date().toDateString() === currentDayDate.toDateString();
+      const isSelected = date.toDateString() === currentDayDate.toDateString();
+      const dateStr = currentDayDate.toISOString().split('T')[0];
+      
+      // Filter appointments for this day to show indicators
+      const dayApts = monthAppointments.filter(a => a.date === dateStr && (selectedDoctor === 'all' || a.doctor_id === selectedDoctor));
+      
+      days.push(
+        <div 
+          key={i} 
+          onClick={() => handleDayClick(i)}
+          className={`
+            min-h-[100px] border border-slate-100 p-2 cursor-pointer transition-all hover:bg-blue-50 relative group
+            ${isSelected ? 'bg-blue-50 ring-2 ring-inset ring-blue-200' : 'bg-white'}
+          `}
+        >
+           <div className="flex justify-between items-start">
+             <span className={`
+               w-7 h-7 flex items-center justify-center rounded-full text-sm font-medium
+               ${isToday ? 'bg-blue-600 text-white' : 'text-slate-700'}
+             `}>
+               {i}
+             </span>
+             {dayApts.length > 0 && (
+               <span className="text-[10px] font-bold text-blue-600 bg-blue-100 px-1.5 rounded-full">
+                 {dayApts.length}
+               </span>
+             )}
+           </div>
+
+           <div className="mt-2 space-y-1 overflow-hidden">
+              {dayApts.slice(0, 3).map(apt => (
+                <div key={apt.id} className="text-[10px] truncate px-1 py-0.5 rounded bg-slate-100 text-slate-600 border-l-2 border-blue-400">
+                   {apt.start_time} {apt.patient?.name.split(' ')[0]}
+                </div>
+              ))}
+              {dayApts.length > 3 && (
+                <div className="text-[10px] text-slate-400 pl-1">+ {dayApts.length - 3} mais</div>
+              )}
+           </div>
+        </div>
+      );
+    }
+    return days;
+  };
+
+  // --- DRAG AND DROP LOGIC (Day View) ---
   const handleDragStart = (e: React.DragEvent, aptId: string) => {
     e.dataTransfer.setData("aptId", aptId);
   };
@@ -72,6 +166,7 @@ export default function CalendarPage() {
     await api.updateAppointment(aptId, { start_time: time });
   };
 
+  // --- MODAL & CRUD LOGIC ---
   const openModal = (apt?: Appointment) => {
     setError('');
     if (apt) {
@@ -116,6 +211,8 @@ export default function CalendarPage() {
       if(!confirmed) return;
       
       setAppointments(prev => prev.filter(a => a.id !== id));
+      // Also update month view cache if needed
+      setMonthAppointments(prev => prev.filter(a => a.id !== id));
 
       try {
           await api.deleteAppointment(id);
@@ -125,7 +222,7 @@ export default function CalendarPage() {
       }
   };
 
-  // Helper to safely format YYYY-MM-DD to DD/MM/YYYY without timezone shift
+  // Helper to safely format YYYY-MM-DD
   const formatSafeDate = (dateStr: string) => {
     if (!dateStr) return '';
     const parts = dateStr.split('-');
@@ -142,7 +239,6 @@ export default function CalendarPage() {
     }
 
     const docDate = new Date().toLocaleDateString('pt-BR');
-    // FIX: Use safe formatter instead of new Date() for appointment date
     const aptDate = formatSafeDate(apt.date);
     const aptTime = apt.start_time;
     const doctorName = (doctors || []).find(d => d.id === apt.doctor_id)?.name || 'Médico Responsável';
@@ -155,10 +251,7 @@ export default function CalendarPage() {
         <meta charset="UTF-8">
         <title>Comprovante de Agendamento</title>
         <script src="https://cdn.tailwindcss.com"></script>
-        <style>
-           body { font-family: sans-serif; padding: 2cm; }
-           @media print { .no-print { display: none; } }
-        </style>
+        <style>body { font-family: sans-serif; padding: 2cm; } @media print { .no-print { display: none; } }</style>
       </head>
       <body class="bg-white text-slate-900">
         <div class="border-b-2 border-slate-900 pb-4 mb-8 flex justify-between items-center">
@@ -169,61 +262,25 @@ export default function CalendarPage() {
                 <p class="text-xs text-slate-500">Comprovante de Agendamento</p>
               </div>
            </div>
-           <div class="text-right text-sm">
-             <p>Emitido em: <b>${docDate}</b></p>
-           </div>
+           <div class="text-right text-sm"><p>Emitido em: <b>${docDate}</b></p></div>
         </div>
-
         <div class="bg-slate-50 border border-slate-200 rounded-xl p-8 mb-8">
            <h2 class="text-xl font-bold text-blue-900 mb-6 border-b border-slate-200 pb-2">Detalhes da Consulta</h2>
            <div class="grid grid-cols-2 gap-6 text-sm">
-              <div>
-                 <p class="text-xs uppercase font-bold text-slate-500 mb-1">Paciente</p>
-                 <p class="text-lg font-bold">${apt.patient?.name}</p>
-                 <p class="text-slate-600">${apt.patient?.cpf || ''}</p>
-              </div>
-              <div>
-                 <p class="text-xs uppercase font-bold text-slate-500 mb-1">Médico</p>
-                 <p class="text-lg font-bold">Dr. ${doctorName}</p>
-              </div>
-              <div>
-                 <p class="text-xs uppercase font-bold text-slate-500 mb-1">Data</p>
-                 <p class="text-lg font-bold">${aptDate}</p>
-              </div>
-              <div>
-                 <p class="text-xs uppercase font-bold text-slate-500 mb-1">Horário</p>
-                 <p class="text-lg font-bold">${aptTime}</p>
-              </div>
-              <div>
-                 <p class="text-xs uppercase font-bold text-slate-500 mb-1">Tipo</p>
-                 <p class="capitalize">${apt.type === 'first' ? 'Primeira Consulta' : apt.type === 'return' ? 'Retorno' : 'Continuidade'}</p>
-              </div>
+              <div><p class="text-xs uppercase font-bold text-slate-500 mb-1">Paciente</p><p class="text-lg font-bold">${apt.patient?.name}</p><p class="text-slate-600">${apt.patient?.cpf || ''}</p></div>
+              <div><p class="text-xs uppercase font-bold text-slate-500 mb-1">Médico</p><p class="text-lg font-bold">Dr. ${doctorName}</p></div>
+              <div><p class="text-xs uppercase font-bold text-slate-500 mb-1">Data</p><p class="text-lg font-bold">${aptDate}</p></div>
+              <div><p class="text-xs uppercase font-bold text-slate-500 mb-1">Horário</p><p class="text-lg font-bold">${aptTime}</p></div>
+              <div><p class="text-xs uppercase font-bold text-slate-500 mb-1">Tipo</p><p class="capitalize">${apt.type === 'first' ? 'Primeira Consulta' : apt.type === 'return' ? 'Retorno' : 'Continuidade'}</p></div>
            </div>
         </div>
-
         <div class="mt-20 space-y-12">
            <div class="flex justify-between gap-8">
-              <div class="flex-1 border-t border-slate-400 pt-2 text-center">
-                 <p class="font-bold text-sm">${apt.patient?.name}</p>
-                 <p class="text-xs text-slate-500">Assinatura do Paciente</p>
-              </div>
-              <div class="flex-1 border-t border-slate-400 pt-2 text-center">
-                 <p class="font-bold text-sm">${attendantName}</p>
-                 <p class="text-xs text-slate-500">Atendente Responsável</p>
-              </div>
+              <div class="flex-1 border-t border-slate-400 pt-2 text-center"><p class="font-bold text-sm">${apt.patient?.name}</p><p class="text-xs text-slate-500">Assinatura do Paciente</p></div>
+              <div class="flex-1 border-t border-slate-400 pt-2 text-center"><p class="font-bold text-sm">${attendantName}</p><p class="text-xs text-slate-500">Atendente Responsável</p></div>
            </div>
-           
-           <div class="w-1/2 mx-auto border-t border-slate-400 pt-2 text-center">
-              <p class="font-bold text-sm">Dr. ${doctorName}</p>
-              <p class="text-xs text-slate-500">Carimbo/Assinatura do Médico</p>
-           </div>
+           <div class="w-1/2 mx-auto border-t border-slate-400 pt-2 text-center"><p class="font-bold text-sm">Dr. ${doctorName}</p><p class="text-xs text-slate-500">Carimbo/Assinatura do Médico</p></div>
         </div>
-
-        <div class="mt-12 text-center text-[10px] text-slate-400">
-           <p>Este comprovante deve ser apresentado na recepção no dia da consulta.</p>
-           <p>Genesis Medical System</p>
-        </div>
-
         <script>window.onload = () => window.print();</script>
       </body>
       </html>
@@ -263,33 +320,55 @@ export default function CalendarPage() {
   };
 
   const safeAppointments = appointments || [];
-  
-  const filteredAppointments = selectedDoctor === 'all' 
-    ? safeAppointments 
-    : safeAppointments.filter(a => a.doctor_id === selectedDoctor);
+  const filteredAppointments = selectedDoctor === 'all' ? safeAppointments : safeAppointments.filter(a => a.doctor_id === selectedDoctor);
+  const timeSlots = Array.from({ length: 11 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
+  const filteredPatientSearch = searchTerm ? (patients || []).filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.cpf?.includes(searchTerm)) : [];
 
-  const timeSlots = Array.from({ length: 11 }, (_, i) => {
-    const hour = i + 8; // 8:00 to 18:00
-    return `${hour.toString().padStart(2, '0')}:00`;
-  });
-
-  const filteredPatientSearch = searchTerm 
-    ? (patients || []).filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.cpf?.includes(searchTerm))
-    : [];
+  const weekDays = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
   return (
     <div className="flex flex-col h-full space-y-4 animate-fade-in-up">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-1">
-            <button onClick={() => setDate(new Date(date.setDate(date.getDate() - 1)))} className="p-1 hover:bg-white hover:shadow-sm rounded transition text-slate-600"><ChevronLeft size={16}/></button>
-            <span className="font-semibold w-36 text-center text-slate-800">
-              {date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}
+            <button 
+                onClick={() => handleNavigate('prev')} 
+                className="p-1 hover:bg-white hover:shadow-sm rounded transition text-slate-600"
+                title={viewMode === 'day' ? "Dia Anterior" : "Mês Anterior"}
+            >
+                <ChevronLeft size={16}/>
+            </button>
+            <span className="font-semibold w-40 text-center text-slate-800 capitalize">
+              {viewMode === 'day' 
+                 ? date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' })
+                 : date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+              }
             </span>
-            <button onClick={() => setDate(new Date(date.setDate(date.getDate() + 1)))} className="p-1 hover:bg-white hover:shadow-sm rounded transition text-slate-600"><ChevronRight size={16}/></button>
+            <button 
+                onClick={() => handleNavigate('next')} 
+                className="p-1 hover:bg-white hover:shadow-sm rounded transition text-slate-600"
+                title={viewMode === 'day' ? "Próximo Dia" : "Próximo Mês"}
+            >
+                <ChevronRight size={16}/>
+            </button>
           </div>
           
+          <div className="flex bg-slate-50 border border-slate-200 rounded-lg p-1">
+             <button 
+               onClick={() => setViewMode('day')}
+               className={`px-3 py-1 rounded text-sm font-medium transition-all flex items-center gap-2 ${viewMode === 'day' ? 'bg-white shadow-sm text-blue-900' : 'text-slate-500 hover:text-slate-700'}`}
+             >
+                <Clock size={14}/> Dia
+             </button>
+             <button 
+               onClick={() => setViewMode('month')}
+               className={`px-3 py-1 rounded text-sm font-medium transition-all flex items-center gap-2 ${viewMode === 'month' ? 'bg-white shadow-sm text-blue-900' : 'text-slate-500 hover:text-slate-700'}`}
+             >
+                <CalendarIcon size={14}/> Mês
+             </button>
+          </div>
+
           <select 
             value={selectedDoctor} 
             onChange={e => setSelectedDoctor(e.target.value)}
@@ -308,83 +387,85 @@ export default function CalendarPage() {
         </button>
       </div>
 
-      {/* Grid */}
-      <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-y-auto">
-        <div className="grid grid-cols-[80px_1fr] divide-x divide-slate-100 h-full">
-          <div className="divide-y divide-slate-100 bg-slate-50">
-            {timeSlots.map(time => (
-              <div key={time} className="h-28 flex items-center justify-center text-xs text-slate-400 font-medium">
-                {time}
-              </div>
-            ))}
-          </div>
-          <div className="divide-y divide-slate-100 relative">
-            {timeSlots.map(time => (
-              <div 
-                key={time} 
-                className="h-28 transition-colors hover:bg-slate-50/50 p-2 group relative"
-                onDragOver={e => e.preventDefault()}
-                onDrop={e => handleDrop(e, time)}
-              >
-                <div className="absolute inset-0 border-2 border-dashed border-blue-200 opacity-0 group-hover:opacity-50 pointer-events-none transition-opacity" />
+      {/* VIEW: DAY MODE */}
+      {viewMode === 'day' && (
+        <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-y-auto animate-fade-in">
+            <div className="grid grid-cols-[80px_1fr] divide-x divide-slate-100 h-full">
+            <div className="divide-y divide-slate-100 bg-slate-50">
+                {timeSlots.map(time => (
+                <div key={time} className="h-28 flex items-center justify-center text-xs text-slate-400 font-medium">
+                    {time}
+                </div>
+                ))}
+            </div>
+            <div className="divide-y divide-slate-100 relative">
+                {timeSlots.map(time => (
+                <div 
+                    key={time} 
+                    className="h-28 transition-colors hover:bg-slate-50/50 p-2 group relative"
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => handleDrop(e, time)}
+                >
+                    <div className="absolute inset-0 border-2 border-dashed border-blue-200 opacity-0 group-hover:opacity-50 pointer-events-none transition-opacity" />
 
-                {filteredAppointments
-                  .filter(a => a.start_time === time)
-                  .map(apt => (
-                    <div
-                      key={apt.id}
-                      draggable
-                      onDragStart={e => handleDragStart(e, apt.id)}
-                      className={`
-                        mb-2 p-3 rounded-lg border-l-4 shadow-sm cursor-move hover:shadow-md transition-all bg-white group/apt relative
-                        ${apt.type === 'first' ? 'border-purple-500' : 
-                          apt.type === 'return' ? 'border-blue-500' : 'border-emerald-500'}
-                      `}
-                    >
-                      {/* Hover Actions */}
-                      <div className="absolute top-2 right-2 hidden group-hover/apt:flex gap-1 bg-white/90 rounded p-1 shadow-sm border border-slate-100">
-                         <button 
-                           onClick={(e) => printAppointmentConfirmation(apt, e)}
-                           className="p-1 hover:bg-slate-100 text-slate-500 hover:text-blue-600 rounded"
-                           title="Imprimir Comprovante"
-                         >
-                           <Printer size={14} />
-                         </button>
-                         <button 
-                           onClick={(e) => { e.stopPropagation(); navigate(`/patients/${apt.patient_id}`); }} 
-                           className="p-1 hover:bg-slate-100 text-slate-500 hover:text-blue-600 rounded"
-                           title="Ver Perfil do Paciente"
-                         >
-                           <UserIcon size={14} />
-                         </button>
-                         <button onClick={(e) => { e.stopPropagation(); openModal(apt); }} className="p-1 hover:bg-slate-100 text-slate-500 hover:text-blue-600 rounded">
-                           <Edit2 size={14} />
-                         </button>
-                         <button onClick={(e) => handleDelete(apt.id, e)} className="p-1 hover:bg-red-50 text-slate-500 hover:text-red-600 rounded">
-                           <Trash2 size={14} />
-                         </button>
-                      </div>
+                    {filteredAppointments
+                    .filter(a => a.start_time === time)
+                    .map(apt => (
+                        <div
+                        key={apt.id}
+                        draggable
+                        onDragStart={e => handleDragStart(e, apt.id)}
+                        className={`
+                            mb-2 p-3 rounded-lg border-l-4 shadow-sm cursor-move hover:shadow-md transition-all bg-white group/apt relative
+                            ${apt.type === 'first' ? 'border-purple-500' : 
+                            apt.type === 'return' ? 'border-blue-500' : 'border-emerald-500'}
+                        `}
+                        >
+                        {/* Hover Actions */}
+                        <div className="absolute top-2 right-2 hidden group-hover/apt:flex gap-1 bg-white/90 rounded p-1 shadow-sm border border-slate-100 z-10">
+                            <button onClick={(e) => printAppointmentConfirmation(apt, e)} className="p-1 hover:bg-slate-100 text-slate-500 hover:text-blue-600 rounded" title="Imprimir"><Printer size={14}/></button>
+                            <button onClick={(e) => { e.stopPropagation(); navigate(`/patients/${apt.patient_id}`); }} className="p-1 hover:bg-slate-100 text-slate-500 hover:text-blue-600 rounded" title="Perfil"><UserIcon size={14}/></button>
+                            <button onClick={(e) => { e.stopPropagation(); openModal(apt); }} className="p-1 hover:bg-slate-100 text-slate-500 hover:text-blue-600 rounded"><Edit2 size={14}/></button>
+                            <button onClick={(e) => handleDelete(apt.id, e)} className="p-1 hover:bg-red-50 text-slate-500 hover:text-red-600 rounded"><Trash2 size={14}/></button>
+                        </div>
 
-                      <div className="flex justify-between items-start">
-                        <span className="font-semibold text-slate-700 text-sm truncate pr-16">{apt.patient?.name || 'Paciente'}</span>
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded
-                          ${apt.type === 'first' ? 'bg-purple-50 text-purple-700' : 
-                            apt.type === 'return' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'}
-                        `}>
-                          {apt.type === 'first' ? '1ª Vez' : apt.type === 'return' ? 'Retorno' : 'Cont.'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-slate-500 mt-2 justify-between">
-                        <span className="flex items-center gap-1"><UserIcon size={12} /> Dr. {(doctors || []).find(d => d.id === apt.doctor_id)?.name.split(' ')[0]}</span>
-                        {apt.price && <span className="font-bold text-green-600">R$ {apt.price}</span>}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            ))}
-          </div>
+                        <div className="flex justify-between items-start">
+                            <span className="font-semibold text-slate-700 text-sm truncate pr-16">{apt.patient?.name || 'Paciente'}</span>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded
+                            ${apt.type === 'first' ? 'bg-purple-50 text-purple-700' : 
+                                apt.type === 'return' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'}
+                            `}>
+                            {apt.type === 'first' ? '1ª Vez' : apt.type === 'return' ? 'Retorno' : 'Cont.'}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-1 text-xs text-slate-500 mt-2 justify-between">
+                            <span className="flex items-center gap-1"><UserIcon size={12} /> Dr. {(doctors || []).find(d => d.id === apt.doctor_id)?.name.split(' ')[0]}</span>
+                            {apt.price && <span className="font-bold text-green-600">R$ {apt.price}</span>}
+                        </div>
+                        </div>
+                    ))}
+                </div>
+                ))}
+            </div>
+            </div>
         </div>
-      </div>
+      )}
+
+      {/* VIEW: MONTH MODE */}
+      {viewMode === 'month' && (
+        <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col animate-fade-in">
+           <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50">
+              {weekDays.map(day => (
+                 <div key={day} className="py-3 text-center text-xs font-bold uppercase text-slate-500 tracking-wider">
+                    {day}
+                 </div>
+              ))}
+           </div>
+           <div className="flex-1 grid grid-cols-7 auto-rows-fr">
+              {renderCalendarGrid()}
+           </div>
+        </div>
+      )}
 
       {/* Modal */}
       {showModal && (
