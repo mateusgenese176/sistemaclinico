@@ -120,6 +120,18 @@ export default function PatientProfile() {
     setAnthropo({ weight: '', height: '', bp_s: '', bp_d: '' });
     await dialog.alert("Sucesso", "Os dados antropométricos e tags foram atualizados com sucesso!");
   };
+  
+  const handleRemoveTag = async (tagToRemove: string) => {
+    if (!id || !patient) return;
+    
+    const currentTags = patient.tags || [];
+    const updatedTags = currentTags.filter(t => t !== tagToRemove);
+    
+    // Optimistic Update
+    setPatient(prev => prev ? ({ ...prev, tags: updatedTags }) : null);
+
+    await api.updatePatient(id, { tags: updatedTags });
+  };
 
   const updatePhoto = async (base64: string) => {
      if(id) {
@@ -769,7 +781,16 @@ export default function PatientProfile() {
                   
                   <div className="flex justify-center flex-wrap gap-2">
                     {patient.tags?.map(tag => (
-                      <span key={tag} className="px-3 py-1 bg-blue-50 text-blue-800 rounded-full text-xs font-medium uppercase tracking-wider">{tag}</span>
+                      <span key={tag} className="px-3 py-1 bg-blue-50 text-blue-800 rounded-full text-xs font-medium uppercase tracking-wider flex items-center gap-1 group/tag">
+                         {tag}
+                         <button 
+                           onClick={() => handleRemoveTag(tag)}
+                           className="hover:text-red-600 hover:bg-blue-100 rounded-full p-0.5 transition-colors"
+                           title="Remover tag"
+                         >
+                           <X size={10} />
+                         </button>
+                      </span>
                     ))}
                   </div>
               </div>
