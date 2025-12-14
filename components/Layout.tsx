@@ -72,7 +72,7 @@ export default function Layout({ children }: { children?: React.ReactNode }) {
                   <img src={LOGO_URL} alt="Genesis Logo" className="h-10 w-auto brightness-0 invert" />
                   <h1 className="text-2xl font-bold tracking-tight text-white">Genesis</h1>
                 </div>
-                <p className="text-xs text-slate-400 pl-1">Medical System</p>
+                <p className="text-xs text-slate-400 pl-1"></p>
               </div>
             )}
              {collapsed && (
