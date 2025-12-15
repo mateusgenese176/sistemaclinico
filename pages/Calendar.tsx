@@ -232,7 +232,7 @@ export default function CalendarPage() {
 
   const printAppointmentConfirmation = (apt: Appointment, e: React.MouseEvent) => {
     e.stopPropagation();
-    const printWindow = window.open('', '_blank', 'width=800,height=600');
+    const printWindow = window.open('', '_blank', 'width=1122,height=793'); // A4 Landscape ratio approximation
     if (!printWindow) {
       dialog.alert("Bloqueio", "Permita popups para imprimir.");
       return;
@@ -244,6 +244,13 @@ export default function CalendarPage() {
     const doctorName = (doctors || []).find(d => d.id === apt.doctor_id)?.name || 'Médico Responsável';
     const attendantName = user?.name || 'Atendente';
 
+    // Address construction
+    let addressStr = 'Endereço não informado';
+    if (apt.patient?.address) {
+       const a = apt.patient.address;
+       addressStr = `${a.street || ''}, ${a.number || ''} ${a.complement ? '- ' + a.complement : ''} - ${a.neighborhood || ''}, ${a.city || ''}/${a.state || ''}`;
+    }
+
     const htmlContent = `
       <!DOCTYPE html>
       <html lang="pt-BR">
@@ -251,35 +258,178 @@ export default function CalendarPage() {
         <meta charset="UTF-8">
         <title>Comprovante de Agendamento</title>
         <script src="https://cdn.tailwindcss.com"></script>
-        <style>body { font-family: sans-serif; padding: 2cm; } @media print { .no-print { display: none; } }</style>
+        <style>
+           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+           body { font-family: 'Inter', sans-serif; background: white; margin: 0; padding: 0; }
+           
+           /* Force Landscape */
+           @page { size: A4 landscape; margin: 0.5cm; }
+           
+           .sheet { 
+             width: 100%; 
+             height: 100vh; 
+             box-sizing: border-box;
+             padding: 1cm;
+             display: flex;
+             flex-direction: column;
+           }
+
+           .header {
+             display: flex;
+             justify-content: space-between;
+             align-items: center;
+             border-bottom: 3px solid #1e3a8a;
+             padding-bottom: 20px;
+             margin-bottom: 30px;
+           }
+
+           .main-content {
+              display: grid;
+              grid-template-columns: 1fr 1fr;
+              gap: 40px;
+              flex-grow: 1;
+           }
+
+           .box {
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 12px;
+              padding: 25px;
+           }
+
+           .box-title {
+              font-size: 14px;
+              font-weight: 700;
+              text-transform: uppercase;
+              color: #1e3a8a;
+              border-bottom: 1px solid #e2e8f0;
+              padding-bottom: 10px;
+              margin-bottom: 20px;
+           }
+
+           .info-row {
+              margin-bottom: 15px;
+           }
+           .label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 2px;}
+           .value { font-size: 16px; font-weight: 600; color: #0f172a; }
+
+           .signatures {
+              margin-top: auto;
+              padding-top: 40px;
+              display: flex;
+              justify-content: space-between;
+              gap: 50px;
+           }
+           .sig-line {
+              flex: 1;
+              border-top: 1px solid #94a3b8;
+              text-align: center;
+              padding-top: 10px;
+           }
+           .sig-name { font-weight: 700; font-size: 14px; }
+           .sig-role { font-size: 11px; color: #64748b; text-transform: uppercase;}
+        </style>
       </head>
-      <body class="bg-white text-slate-900">
-        <div class="border-b-2 border-slate-900 pb-4 mb-8 flex justify-between items-center">
-           <div class="flex items-center gap-3">
-              <img src="${LOGO_URL}" alt="Genesis" class="h-10 w-auto" />
-              <div>
-                <h1 class="text-2xl font-bold uppercase tracking-wider">Genesis Medical</h1>
-                <p class="text-xs text-slate-500">Comprovante de Agendamento</p>
+      <body>
+        <div class="sheet">
+           <div class="header">
+              <div class="flex items-center gap-4">
+                 <img src="${LOGO_URL}" alt="Genesis" class="h-16 w-auto" />
+                 <div>
+                   <h1 class="text-3xl font-bold uppercase tracking-wider text-slate-900">Genesis Medical</h1>
+                   <p class="text-sm text-slate-500 font-medium">Comprovante de Agendamento</p>
+                 </div>
+              </div>
+              <div class="text-right">
+                 <p class="text-xs text-slate-500 uppercase font-bold">Data de Emissão</p>
+                 <p class="text-lg font-bold text-slate-900">${docDate}</p>
               </div>
            </div>
-           <div class="text-right text-sm"><p>Emitido em: <b>${docDate}</b></p></div>
-        </div>
-        <div class="bg-slate-50 border border-slate-200 rounded-xl p-8 mb-8">
-           <h2 class="text-xl font-bold text-blue-900 mb-6 border-b border-slate-200 pb-2">Detalhes da Consulta</h2>
-           <div class="grid grid-cols-2 gap-6 text-sm">
-              <div><p class="text-xs uppercase font-bold text-slate-500 mb-1">Paciente</p><p class="text-lg font-bold">${apt.patient?.name}</p><p class="text-slate-600">${apt.patient?.cpf || ''}</p></div>
-              <div><p class="text-xs uppercase font-bold text-slate-500 mb-1">Médico</p><p class="text-lg font-bold">Dr. ${doctorName}</p></div>
-              <div><p class="text-xs uppercase font-bold text-slate-500 mb-1">Data</p><p class="text-lg font-bold">${aptDate}</p></div>
-              <div><p class="text-xs uppercase font-bold text-slate-500 mb-1">Horário</p><p class="text-lg font-bold">${aptTime}</p></div>
-              <div><p class="text-xs uppercase font-bold text-slate-500 mb-1">Tipo</p><p class="capitalize">${apt.type === 'first' ? 'Primeira Consulta' : apt.type === 'return' ? 'Retorno' : 'Continuidade'}</p></div>
+
+           <div class="main-content">
+              <!-- Patient Column -->
+              <div class="box">
+                 <div class="box-title">Dados do Paciente</div>
+                 
+                 <div class="info-row">
+                    <span class="label">Nome Completo</span>
+                    <span class="value" style="font-size: 20px;">${apt.patient?.name}</span>
+                 </div>
+
+                 <div class="grid grid-cols-2 gap-4">
+                    <div class="info-row">
+                        <span class="label">CPF</span>
+                        <span class="value font-mono">${apt.patient?.cpf || 'Não informado'}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">RG</span>
+                        <span class="value text-slate-400 font-light border-b border-dashed border-slate-300 w-full block">________________</span>
+                    </div>
+                 </div>
+
+                 <div class="info-row">
+                    <span class="label">Endereço</span>
+                    <span class="value text-sm leading-snug block">${addressStr}</span>
+                 </div>
+                 
+                 <div class="info-row">
+                    <span class="label">Contato</span>
+                    <span class="value">${apt.patient?.contact || 'Não informado'}</span>
+                 </div>
+              </div>
+
+              <!-- Appointment Column -->
+              <div class="box">
+                 <div class="box-title">Dados do Agendamento</div>
+                 
+                 <div class="grid grid-cols-2 gap-4">
+                    <div class="info-row">
+                        <span class="label">Data da Consulta</span>
+                        <span class="value text-blue-900" style="font-size: 20px;">${aptDate}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Horário</span>
+                        <span class="value text-blue-900" style="font-size: 20px;">${aptTime}</span>
+                    </div>
+                 </div>
+
+                 <div class="info-row">
+                    <span class="label">Médico Responsável</span>
+                    <span class="value">Dr. ${doctorName}</span>
+                 </div>
+
+                 <div class="grid grid-cols-2 gap-4">
+                    <div class="info-row">
+                        <span class="label">Tipo</span>
+                        <span class="value capitalize">${apt.type === 'first' ? 'Primeira Consulta' : apt.type === 'return' ? 'Retorno' : 'Continuidade'}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">Plano / Convênio</span>
+                        <span class="value uppercase">${apt.plan || 'Particular'}</span>
+                    </div>
+                 </div>
+
+                 <div class="info-row mt-4 p-4 bg-white border border-slate-200 rounded-lg flex justify-between items-center">
+                    <span class="label mb-0">Valor do Procedimento</span>
+                    <span class="value text-emerald-700">R$ ${Number(apt.price).toFixed(2)}</span>
+                 </div>
+              </div>
            </div>
-        </div>
-        <div class="mt-20 space-y-12">
-           <div class="flex justify-between gap-8">
-              <div class="flex-1 border-t border-slate-400 pt-2 text-center"><p class="font-bold text-sm">${apt.patient?.name}</p><p class="text-xs text-slate-500">Assinatura do Paciente</p></div>
-              <div class="flex-1 border-t border-slate-400 pt-2 text-center"><p class="font-bold text-sm">${attendantName}</p><p class="text-xs text-slate-500">Atendente Responsável</p></div>
+
+           <div class="signatures">
+              <div class="sig-line">
+                 <p class="sig-name">${apt.patient?.name}</p>
+                 <p class="sig-role">Assinatura do Paciente</p>
+              </div>
+              <div class="sig-line">
+                 <p class="sig-name">${attendantName}</p>
+                 <p class="sig-role">Atendente Responsável</p>
+              </div>
+              <div class="sig-line">
+                 <p class="sig-name">Dr. ${doctorName}</p>
+                 <p class="sig-role">Carimbo/Assinatura do Médico</p>
+              </div>
            </div>
-           <div class="w-1/2 mx-auto border-t border-slate-400 pt-2 text-center"><p class="font-bold text-sm">Dr. ${doctorName}</p><p class="text-xs text-slate-500">Carimbo/Assinatura do Médico</p></div>
         </div>
         <script>window.onload = () => window.print();</script>
       </body>
