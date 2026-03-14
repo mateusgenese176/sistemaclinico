@@ -23,6 +23,7 @@ export default function ChatWidget() {
   const [newMessage, setNewMessage] = useState('');
   const [isUrgent, setIsUrgent] = useState(false);
   const [urgentMessage, setUrgentMessage] = useState<Message | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Unread Messages Tracking
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
@@ -82,8 +83,8 @@ export default function ChatWidget() {
                  [msg.sender_id]: (prev[msg.sender_id] || 0) + 1
                }));
                
-               // Play Sound
-               audioRef.current.play().catch(e => console.log("Audio interaction needed"));
+               // Play Sound for background messages
+               audioRef.current.play().catch(() => {});
             }
 
             // Handle Urgent Popup
@@ -113,13 +114,19 @@ export default function ChatWidget() {
       });
 
       const fetchMsgs = async () => {
-        const { data } = await api.getMessages(user.id, activeChatUser.id);
-        const msgs = (data as any) || [];
-        setMessages(msgs);
-        
-        // Check for urgent messages in the last 5 messages
-        const lastUrgent = msgs.slice(-5).reverse().find((m: Message) => m.is_urgent && m.receiver_id === user?.id);
-        if (lastUrgent) setUrgentMessage(lastUrgent);
+        setIsLoading(true);
+        try {
+          const { data } = await api.getMessages(user.id, activeChatUser.id);
+          const msgs = (data as any) || [];
+          // Reverse because we fetch latest first (descending)
+          setMessages(msgs.reverse());
+          
+          // Check for urgent messages in the last 5 messages
+          const lastUrgent = msgs.slice(-5).reverse().find((m: Message) => m.is_urgent && m.receiver_id === user?.id);
+          if (lastUrgent) setUrgentMessage(lastUrgent);
+        } finally {
+          setIsLoading(false);
+        }
       };
       
       fetchMsgs();
@@ -353,42 +360,62 @@ export default function ChatWidget() {
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-100">
-              {safeMessages.length === 0 && (
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-100 relative">
+              {isLoading && messages.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-100/50 z-10">
+                  <div className="w-6 h-6 border-2 border-blue-900 border-t-transparent rounded-full animate-spin"></div>
+                </div>
+              )}
+              
+              {safeMessages.length === 0 && !isLoading && (
                 <div className="text-center text-slate-400 text-xs mt-4">
                   Inicie a conversa com {activeChatUser?.name}
                 </div>
               )}
-              {safeMessages.map((msg) => {
+              
+              {safeMessages.map((msg, idx) => {
                 const isMe = msg.sender_id === user?.id;
+                const msgDate = new Date(msg.created_at).toLocaleDateString();
+                const prevMsgDate = idx > 0 ? new Date(safeMessages[idx-1].created_at).toLocaleDateString() : null;
+                const showDate = msgDate !== prevMsgDate;
+
                 return (
-                  <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group`}>
-                    <div className={`
-                      max-w-[85%] rounded-2xl p-3 text-sm shadow-sm relative
-                      ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none'}
-                      ${msg.is_urgent ? 'border-2 border-red-500 bg-red-50 text-red-900' : ''}
-                    `}>
-                      {msg.is_urgent && (
-                        <div className="flex items-center gap-1 text-[10px] font-bold uppercase mb-1 text-red-600">
-                          <AlertTriangle size={10} /> Urgente
-                        </div>
-                      )}
-                      {msg.content}
-                      
-                      {isMe && (
-                        <button 
-                          onClick={() => handleDeleteMessage(msg.id)}
-                          className="absolute -left-8 top-1/2 -translate-y-1/2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
-                          title="Apagar mensagem para todos"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                  <React.Fragment key={msg.id}>
+                    {showDate && (
+                      <div className="flex justify-center my-2">
+                        <span className="bg-slate-200 text-slate-500 text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-widest">
+                          {msgDate === new Date().toLocaleDateString() ? 'Hoje' : msgDate}
+                        </span>
+                      </div>
+                    )}
+                    <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} group`}>
+                      <div className={`
+                        max-w-[85%] rounded-2xl p-3 text-sm shadow-sm relative
+                        ${isMe ? 'bg-blue-600 text-white rounded-br-none' : 'bg-white text-slate-800 border border-slate-200 rounded-bl-none'}
+                        ${msg.is_urgent ? 'border-2 border-red-500 bg-red-50 text-red-900' : ''}
+                      `}>
+                        {msg.is_urgent && (
+                          <div className="flex items-center gap-1 text-[10px] font-bold uppercase mb-1 text-red-600">
+                            <AlertTriangle size={10} /> Urgente
+                          </div>
+                        )}
+                        {msg.content}
+                        
+                        {isMe && (
+                          <button 
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="absolute -left-8 top-1/2 -translate-y-1/2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                            title="Apagar mensagem para todos"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-slate-400 mt-1 px-1">
+                        {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </span>
                     </div>
-                    <span className="text-[10px] text-slate-400 mt-1 px-1">
-                      {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </span>
-                  </div>
+                  </React.Fragment>
                 );
               })}
               <div ref={messagesEndRef} />
