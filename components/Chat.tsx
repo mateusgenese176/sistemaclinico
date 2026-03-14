@@ -128,20 +128,35 @@ export default function ChatWidget() {
         .channel(`chat_room:${user.id}:${activeChatUser.id}`)
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'messages' }, 
+          { event: 'INSERT', schema: 'public', table: 'messages' }, 
           (payload) => {
             const newMsg = payload.new as Message;
-            const oldMsg = payload.old as Partial<Message>;
+            
+            // If it's for this conversation
+            const isRelevant = 
+              (newMsg.sender_id === activeChatUser.id && newMsg.receiver_id === user.id) ||
+              (newMsg.sender_id === user.id && newMsg.receiver_id === activeChatUser.id);
 
-            // Refresh if message belongs to this conversation
-            const relevant = 
-              (newMsg && newMsg.sender_id === activeChatUser.id && newMsg.receiver_id === user.id) ||
-              (newMsg && newMsg.sender_id === user.id && newMsg.receiver_id === activeChatUser.id) ||
-              (oldMsg && oldMsg.id && messages.some(m => m.id === oldMsg.id)); // Deletion check
+            if (isRelevant) {
+              setMessages(prev => {
+                // Avoid duplicates from optimistic updates
+                if (prev.some(m => m.id === newMsg.id)) return prev;
+                return [...prev, newMsg];
+              });
 
-            if (relevant || payload.eventType === 'DELETE') {
-               fetchMsgs(); 
+              // Play sound for incoming messages
+              if (newMsg.sender_id === activeChatUser.id) {
+                audioRef.current.play().catch(() => {});
+              }
             }
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'DELETE', schema: 'public', table: 'messages' },
+          (payload) => {
+            const oldId = payload.old.id;
+            setMessages(prev => prev.filter(m => m.id !== oldId));
           }
         )
         .subscribe();
@@ -161,11 +176,24 @@ export default function ChatWidget() {
 
     const contentToSend = newMessage;
     const urgentToSend = isUrgent;
+    const tempId = 'temp-' + Date.now();
+
+    // Optimistic UI update
+    const optimisticMsg: Message = {
+      id: tempId,
+      sender_id: user.id,
+      receiver_id: activeChatUser.id,
+      content: contentToSend,
+      is_urgent: urgentToSend,
+      created_at: new Date().toISOString(),
+      sender: { name: user.name }
+    };
     
+    setMessages(prev => [...prev, optimisticMsg]);
     setNewMessage('');
     setIsUrgent(false);
 
-    const { error } = await api.sendMessage({
+    const { data, error } = await api.sendMessage({
       sender_id: user.id,
       receiver_id: activeChatUser.id,
       content: contentToSend,
@@ -173,10 +201,11 @@ export default function ChatWidget() {
     });
 
     if (error) {
+      setMessages(prev => prev.filter(m => m.id !== tempId));
       dialog.alert('Erro ao enviar mensagem');
-      // Re-fetch to sync if error
-      const { data } = await api.getMessages(user.id, activeChatUser.id);
-      setMessages((data as any) || []);
+    } else if (data && data[0]) {
+      // Replace optimistic message with real one to avoid duplicates later
+      setMessages(prev => prev.map(m => m.id === tempId ? data[0] : m));
     }
   };
 
