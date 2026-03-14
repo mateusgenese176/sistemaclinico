@@ -33,7 +33,7 @@ export default function CalendarPage() {
   const [selectedPatientName, setSelectedPatientName] = useState('');
   const [newApt, setNewApt] = useState({ 
     patient_id: '', doctor_id: user?.role === 'doctor' ? user.id : '', 
-    start_time: '08:00', date: '', type: 'first' as const,
+    start_time: '08:00', date: date.toISOString().split('T')[0], type: 'first' as const,
     plan: 'particular', price: '' as any
   });
 
@@ -454,30 +454,53 @@ export default function CalendarPage() {
                   )}
                </div>
 
-               <div className="grid grid-cols-2 gap-4">
-                  <div>
-                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Horário</label>
-                     <select 
-                       className="w-full mt-1 bg-white border border-slate-200 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-900 appearance-none"
-                       value={newApt.start_time}
-                       onChange={e => setNewApt({...newApt, start_time: e.target.value})}
-                     >
-                        {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
-                     </select>
-                  </div>
-                  <div>
-                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Tipo</label>
-                     <select 
-                       className="w-full mt-1 bg-white border border-slate-200 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-900 appearance-none"
-                       value={newApt.type}
-                       onChange={e => setNewApt({...newApt, type: e.target.value as any})}
-                     >
-                        <option value="first">Consulta</option>
-                        <option value="return">Retorno</option>
-                        <option value="continuity">Exame</option>
-                     </select>
-                  </div>
-               </div>
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Data</label>
+                      <input 
+                        type="date"
+                        className="w-full mt-1 bg-white border border-slate-200 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-900"
+                        value={newApt.date}
+                        onChange={e => setNewApt({...newApt, date: e.target.value})}
+                      />
+                   </div>
+                   <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Horário</label>
+                      <select 
+                        className="w-full mt-1 bg-white border border-slate-200 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-900 appearance-none"
+                        value={newApt.start_time}
+                        onChange={e => setNewApt({...newApt, start_time: e.target.value})}
+                      >
+                         {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Tipo</label>
+                      <select 
+                        className="w-full mt-1 bg-white border border-slate-200 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-900 appearance-none"
+                        value={newApt.type}
+                        onChange={e => setNewApt({...newApt, type: e.target.value as any})}
+                      >
+                         <option value="first">Consulta</option>
+                         <option value="return">Retorno</option>
+                         <option value="continuity">Exame</option>
+                      </select>
+                   </div>
+                   <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Valor (R$)</label>
+                      <input 
+                        type="number"
+                        step="0.01"
+                        className="w-full mt-1 bg-white border border-slate-200 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-900"
+                        placeholder="0,00"
+                        value={newApt.price}
+                        onChange={e => setNewApt({...newApt, price: e.target.value})}
+                      />
+                   </div>
+                </div>
 
                <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Médico Responsável</label>

@@ -22,6 +22,7 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isUrgent, setIsUrgent] = useState(false);
+  const [urgentMessage, setUrgentMessage] = useState<Message | null>(null);
 
   // Unread Messages Tracking
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
@@ -113,7 +114,12 @@ export default function ChatWidget() {
 
       const fetchMsgs = async () => {
         const { data } = await api.getMessages(user.id, activeChatUser.id);
-        setMessages((data as any) || []);
+        const msgs = (data as any) || [];
+        setMessages(msgs);
+        
+        // Check for urgent messages in the last 5 messages
+        const lastUrgent = msgs.slice(-5).reverse().find((m: Message) => m.is_urgent && m.receiver_id === user?.id);
+        if (lastUrgent) setUrgentMessage(lastUrgent);
       };
       
       fetchMsgs();
@@ -153,35 +159,46 @@ export default function ChatWidget() {
     e.preventDefault();
     if (!newMessage.trim() || !user || !activeChatUser) return;
 
-    const tempId = Math.random().toString();
-    const optimisticMsg: Message = {
-        id: tempId,
-        sender_id: user.id,
-        receiver_id: activeChatUser.id,
-        content: newMessage,
-        is_urgent: isUrgent,
-        created_at: new Date().toISOString()
-    };
-    
-    // Optimistic UI update
-    setMessages(prev => [...prev, optimisticMsg]);
     const contentToSend = newMessage;
     const urgentToSend = isUrgent;
     
     setNewMessage('');
     setIsUrgent(false);
 
-    await api.sendMessage({
+    const { error } = await api.sendMessage({
       sender_id: user.id,
       receiver_id: activeChatUser.id,
       content: contentToSend,
       is_urgent: urgentToSend
     });
+
+    if (error) {
+      dialog.alert('Erro ao enviar mensagem');
+      // Re-fetch to sync if error
+      const { data } = await api.getMessages(user.id, activeChatUser.id);
+      setMessages((data as any) || []);
+    }
   };
 
   const handleDeleteMessage = async (msgId: string) => {
-    setMessages(prev => prev.filter(m => m.id !== msgId));
-    await api.deleteMessage(msgId);
+    const confirm = await dialog.confirm('Deseja apagar esta mensagem?');
+    if (confirm) {
+      setMessages(prev => prev.filter(m => m.id !== msgId));
+      await api.deleteMessage(msgId);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (!activeChatUser || !user) return;
+    const confirm = await dialog.confirm('Deseja realmente apagar todo o histórico desta conversa?');
+    if (confirm) {
+      const { error } = await api.clearChat(user.id, activeChatUser.id);
+      if (error) {
+        dialog.alert('Erro ao limpar histórico');
+      } else {
+        setMessages([]);
+      }
+    }
   };
 
   const handleUserSelect = (targetUser: User) => {
@@ -226,9 +243,20 @@ export default function ChatWidget() {
              {view === 'users' ? 'Contatos' : activeChatUser?.name}
            </h3>
         </div>
-        <button onClick={() => setIsOpen(false)} className="hover:bg-blue-800 p-1 rounded">
-          <X size={18} />
-        </button>
+        <div className="flex items-center gap-2">
+          {view === 'chat' && (
+            <button 
+              onClick={handleClearHistory}
+              className="hover:bg-red-500/20 p-1 rounded transition-colors text-white/70 hover:text-white"
+              title="Limpar Histórico"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+          <button onClick={() => setIsOpen(false)} className="hover:bg-blue-800 p-1 rounded">
+            <X size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -277,6 +305,25 @@ export default function ChatWidget() {
         {/* VIEW: CHAT ROOM */}
         {view === 'chat' && (
           <>
+            {/* Urgent Message Banner */}
+            {urgentMessage && (
+              <div className="bg-amber-50 border-b border-amber-100 p-2 flex items-start gap-2 animate-in fade-in slide-in-from-top duration-300">
+                <div className="bg-amber-100 p-1.5 rounded-lg text-amber-600">
+                  <AlertTriangle size={16} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[9px] font-bold text-amber-800 uppercase tracking-wider">Aviso Importante</p>
+                  <p className="text-xs text-amber-900 line-clamp-2">{urgentMessage.content}</p>
+                </div>
+                <button 
+                  onClick={() => setUrgentMessage(null)}
+                  className="text-amber-400 hover:text-amber-600 p-1"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-100">
               {safeMessages.length === 0 && (
                 <div className="text-center text-slate-400 text-xs mt-4">

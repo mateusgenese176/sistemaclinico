@@ -33,6 +33,7 @@ export interface Patient {
   social_info: string;
   address?: Address; // New Address field
   tags?: string[]; // stored as text[] in supabase
+  insurance_plan?: string;
   anthropometrics?: Anthropometrics;
   photo_url?: string; // Base64 string or URL
 }

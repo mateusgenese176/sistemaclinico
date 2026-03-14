@@ -777,9 +777,10 @@ export default function PatientProfile() {
                   
                   <h2 className="text-2xl font-bold text-slate-900">{patient.name}</h2>
                   <p className="text-slate-500 text-sm">ID: {patient.id.slice(0, 8)}</p>
-                  <p className="text-slate-500 text-sm mb-4">CPF: {patient.cpf || 'N/A'}</p>
+                  <p className="text-slate-500 text-sm">CPF: {patient.cpf || 'N/A'}</p>
+                  <p className="text-blue-900 text-xs font-bold mt-1 uppercase tracking-wider">Plano: {patient.insurance_plan || 'Particular'}</p>
                   
-                  <div className="flex justify-center flex-wrap gap-2">
+                  <div className="flex justify-center flex-wrap gap-2 mt-4">
                     {patient.tags?.map(tag => (
                       <span key={tag} className="px-3 py-1 bg-blue-50 text-blue-800 rounded-full text-xs font-medium uppercase tracking-wider flex items-center gap-1 group/tag">
                          {tag}
@@ -902,6 +903,27 @@ export default function PatientProfile() {
                             placeholder="Adicionar tags (separadas por vírgula)" className="md:col-span-2 bg-white border border-slate-200 rounded p-2 text-sm outline-none focus:border-blue-500"
                             value={newTags} onChange={e => setNewTags(e.target.value)}
                           />
+                          <div className="md:col-span-2">
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Alterar Plano de Saúde</label>
+                            <select 
+                              className="w-full bg-white border border-slate-200 rounded p-2 text-sm outline-none focus:border-blue-500 appearance-none"
+                              value={patient.insurance_plan || 'Particular'}
+                              onChange={async (e) => {
+                                const newVal = e.target.value;
+                                await api.updatePatient(patient.id, { insurance_plan: newVal });
+                                setPatient({...patient, insurance_plan: newVal});
+                              }}
+                            >
+                              <option value="Particular">Particular</option>
+                              <option value="HapVida">HapVida</option>
+                              <option value="Unimed">Unimed</option>
+                              <option value="Sulamerica">Sulamerica</option>
+                              <option value="Select">Select</option>
+                              <option value="Life">Life</option>
+                              <option value="Cartão São Gabriel">Cartão São Gabriel</option>
+                              <option value="Outro">Outro</option>
+                            </select>
+                          </div>
                           <button onClick={handleUpdateBio} className="md:col-span-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 rounded transition-colors text-sm">
                               Atualizar Dados
                           </button>

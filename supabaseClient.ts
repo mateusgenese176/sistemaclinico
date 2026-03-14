@@ -43,6 +43,9 @@ begin
   if not exists (select 1 from information_schema.columns where table_name='patients' and column_name='address') then 
     alter table patients add column address jsonb default '{}'::jsonb; 
   end if;
+  if not exists (select 1 from information_schema.columns where table_name='patients' and column_name='insurance_plan') then 
+    alter table patients add column insurance_plan text; 
+  end if;
   if not exists (select 1 from information_schema.columns where table_name='anamneses' and column_name='status') then 
     alter table anamneses add column status text default 'final'; 
   end if;
@@ -275,6 +278,12 @@ export const api = {
   
   sendMessage: async (msg: any) => supabase.from('messages').insert(msg),
   deleteMessage: async (id: string) => supabase.from('messages').delete().eq('id', id),
+  clearChat: async (user1: string, user2: string) => {
+    return supabase
+      .from('messages')
+      .delete()
+      .or(`and(sender_id.eq.${user1},receiver_id.eq.${user2}),and(sender_id.eq.${user2},receiver_id.eq.${user1})`);
+  },
 
   // Notifications
   getNotifications: async (userId: string) => 
