@@ -12,12 +12,20 @@ import { useAuth } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { useDialog } from '../components/Dialog';
 
+import { 
+  format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, 
+  eachDayOfInterval, isSameMonth, isSameDay, addDays, subDays,
+  addMonths, subMonths, startOfDay, endOfDay, isToday as isTodayFn
+} from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
 export default function CalendarPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const dialog = useDialog();
   
   const [date, setDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [allAppointments, setAllAppointments] = useState<Appointment[]>([]); // Para busca do próximo paciente global
   const [doctors, setDoctors] = useState<User[]>([]);
@@ -57,8 +65,21 @@ export default function CalendarPage() {
   }, []);
 
   const fetchData = async () => {
-    const dateStr = date.toISOString().split('T')[0];
-    const { data } = await api.getAppointments(dateStr);
+    let startDate: string | undefined;
+    let endDate: string | undefined;
+    let dateStr: string | undefined;
+
+    if (viewMode === 'day') {
+      dateStr = format(date, 'yyyy-MM-dd');
+    } else if (viewMode === 'week') {
+      startDate = format(startOfWeek(date, { weekStartsOn: 0 }), 'yyyy-MM-dd');
+      endDate = format(endOfWeek(date, { weekStartsOn: 0 }), 'yyyy-MM-dd');
+    } else if (viewMode === 'month') {
+      startDate = format(startOfMonth(date), 'yyyy-MM-dd');
+      endDate = format(endOfMonth(date), 'yyyy-MM-dd');
+    }
+
+    const { data } = await api.getAppointments(dateStr, startDate, endDate);
     setAppointments((data as Appointment[]) || []);
     
     // Atualiza a lista global para garantir que o próximo paciente esteja correto
@@ -67,12 +88,18 @@ export default function CalendarPage() {
   };
 
   const handleNavigate = (direction: 'prev' | 'next' | 'today') => {
-    const newDate = new Date(date);
     if (direction === 'today') {
       setDate(new Date());
-    } else {
-      newDate.setDate(date.getDate() + (direction === 'next' ? 1 : -1));
-      setDate(newDate);
+      return;
+    }
+
+    const amount = direction === 'next' ? 1 : -1;
+    if (viewMode === 'day') {
+      setDate(addDays(date, amount));
+    } else if (viewMode === 'week') {
+      setDate(addDays(date, amount * 7));
+    } else if (viewMode === 'month') {
+      setDate(addMonths(date, amount));
     }
   };
 
@@ -207,31 +234,42 @@ export default function CalendarPage() {
           {/* Mini Calendar Navigation */}
           <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
              <div className="flex justify-between items-center mb-6">
-                <button onClick={() => handleNavigate('prev')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors"><ChevronLeft size={18}/></button>
-                <span className="font-bold text-sm uppercase tracking-widest text-slate-700">{date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
-                <button onClick={() => handleNavigate('next')} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors"><ChevronRight size={18}/></button>
+                <button onClick={() => setDate(subMonths(date, 1))} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors"><ChevronLeft size={18}/></button>
+                <span className="font-bold text-sm uppercase tracking-widest text-slate-700">{format(date, 'MMMM yyyy', { locale: ptBR })}</span>
+                <button onClick={() => setDate(addMonths(date, 1))} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors"><ChevronRight size={18}/></button>
              </div>
              <div className="grid grid-cols-7 gap-1 text-center mb-2">
                 {['D','S','T','Q','Q','S','S'].map(d => <span key={d} className="text-[10px] font-bold text-slate-400">{d}</span>)}
              </div>
              <div className="grid grid-cols-7 gap-1">
-                {Array.from({length: 31}).map((_, i) => {
-                  const isToday = new Date().getDate() === i+1 && new Date().getMonth() === date.getMonth() && new Date().getFullYear() === date.getFullYear();
-                  const isSelected = date.getDate() === i+1;
-                  return (
-                    <button 
-                      key={i} 
-                      onClick={() => {
-                        const d = new Date(date);
-                        d.setDate(i+1);
-                        setDate(d);
-                      }}
-                      className={`h-8 w-8 rounded-full text-xs flex items-center justify-center transition-all ${isSelected ? 'bg-blue-900 text-white font-bold' : isToday ? 'text-blue-600 font-bold bg-blue-50' : 'text-slate-600 hover:bg-slate-50'}`}
-                    >
-                      {i+1}
-                    </button>
-                  );
-                })}
+                {(() => {
+                  const monthStart = startOfMonth(date);
+                  const monthEnd = endOfMonth(monthStart);
+                  const startDate = startOfWeek(monthStart);
+                  const endDate = endOfWeek(monthEnd);
+                  
+                  const calendarDays = eachDayOfInterval({
+                    start: startDate,
+                    end: endDate,
+                  });
+
+                  return calendarDays.map((day, i) => {
+                    const isToday = isTodayFn(day);
+                    const isSelected = isSameDay(day, date);
+                    const isCurrentMonth = isSameMonth(day, monthStart);
+
+                    return (
+                      <button 
+                        key={i} 
+                        onClick={() => setDate(day)}
+                        className={`h-8 w-8 rounded-full text-xs flex items-center justify-center transition-all 
+                          ${isSelected ? 'bg-blue-900 text-white font-bold' : isToday ? 'text-blue-600 font-bold bg-blue-50' : isCurrentMonth ? 'text-slate-600 hover:bg-slate-50' : 'text-slate-300 hover:bg-slate-50'}`}
+                      >
+                        {format(day, 'd')}
+                      </button>
+                    );
+                  });
+                })()}
              </div>
           </div>
 
@@ -283,9 +321,24 @@ export default function CalendarPage() {
            {/* Timeline Toolbar */}
            <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 bg-white/80 backdrop-blur-md sticky top-0 z-20">
               <div className="flex bg-slate-100 p-1 rounded-xl">
-                 <button onClick={() => handleNavigate('today')} className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${date.toDateString() === new Date().toDateString() ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Hoje</button>
-                 <button className="px-4 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-700">Amanhã</button>
-                 <button className="px-4 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-700">Esta Semana</button>
+                 <button 
+                  onClick={() => setViewMode('day')} 
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'day' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                 >
+                   Dia
+                 </button>
+                 <button 
+                  onClick={() => setViewMode('week')} 
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'week' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                 >
+                   Semana
+                 </button>
+                 <button 
+                  onClick={() => setViewMode('month')} 
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${viewMode === 'month' ? 'bg-white text-blue-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                 >
+                   Mês
+                 </button>
               </div>
 
               <div className="relative w-full md:w-96">
@@ -308,109 +361,214 @@ export default function CalendarPage() {
            {/* Timeline Body */}
            <div className="flex-1 overflow-y-auto relative bg-slate-50">
               
-              <div className="p-6 border-b border-slate-200/60 bg-white">
-                 <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">VISUALIZAÇÃO DIÁRIA</span>
-                 <h2 className="text-xl font-bold text-slate-900 capitalize">
-                    {date.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
-                 </h2>
+              <div className="p-6 border-b border-slate-200/60 bg-white flex justify-between items-center">
+                 <div>
+                    <span className="text-xs font-bold text-blue-600 uppercase tracking-widest">
+                      {viewMode === 'day' ? 'VISUALIZAÇÃO DIÁRIA' : viewMode === 'week' ? 'VISUALIZAÇÃO SEMANAL' : 'VISUALIZAÇÃO MENSAL'}
+                    </span>
+                    <h2 className="text-xl font-bold text-slate-900 capitalize">
+                        {viewMode === 'day' 
+                          ? format(date, "EEEE, d 'de' MMMM", { locale: ptBR })
+                          : viewMode === 'week'
+                            ? `Semana de ${format(startOfWeek(date, { weekStartsOn: 0 }), "d 'de' MMMM", { locale: ptBR })}`
+                            : format(date, "MMMM 'de' yyyy", { locale: ptBR })
+                        }
+                    </h2>
+                 </div>
+                 <button 
+                  onClick={() => handleNavigate('today')}
+                  className="px-4 py-2 bg-blue-50 text-blue-700 rounded-xl text-xs font-bold hover:bg-blue-100 transition-all"
+                 >
+                   Ir para Hoje
+                 </button>
               </div>
 
-              {/* Current Time Line Indicator */}
-              {date.toDateString() === new Date().toDateString() && (
-                 <div 
-                   className="absolute left-0 right-0 z-10 pointer-events-none flex items-center transition-all duration-1000"
-                   style={{ top: `${getTimeIndicatorPosition() + 112}px` }} 
-                 >
-                    <span className="bg-red-500 text-[10px] font-bold px-1.5 py-0.5 rounded ml-12 shadow-md text-white">{currentTime.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                    <div className="h-px flex-1 bg-red-500/30"></div>
-                    <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"></div>
-                 </div>
+              {viewMode === 'day' && (
+                <>
+                  {/* Current Time Line Indicator */}
+                  {date.toDateString() === new Date().toDateString() && (
+                    <div 
+                      className="absolute left-0 right-0 z-10 pointer-events-none flex items-center transition-all duration-1000"
+                      style={{ top: `${getTimeIndicatorPosition() + 112}px` }} 
+                    >
+                        <span className="bg-red-500 text-[10px] font-bold px-1.5 py-0.5 rounded ml-12 shadow-md text-white">{currentTime.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                        <div className="h-px flex-1 bg-red-500/30"></div>
+                        <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]"></div>
+                    </div>
+                  )}
+
+                  {/* Time Slots */}
+                  <div className="relative bg-white">
+                    {timeSlots.map(time => (
+                        <div 
+                          key={time} 
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => handleDrop(e, time)}
+                          className="flex min-h-[56px] border-b border-slate-100 group"
+                        >
+                          <div className="w-24 flex-shrink-0 flex justify-center py-4 border-r border-slate-50">
+                              <span className="text-xs font-bold text-slate-400 group-hover:text-blue-600 transition-colors">{time}</span>
+                          </div>
+                          <div className="flex-1 p-2 relative">
+                              <div className="absolute inset-2 border-2 border-dashed border-slate-100 rounded-xl opacity-0 group-hover:opacity-100 transition-all pointer-events-none"></div>
+                              
+                              <div className="relative z-0 space-y-2">
+                                {filteredApts.filter(a => a.start_time === time && a.date === format(date, 'yyyy-MM-dd')).map(apt => {
+                                  const style = getTypeStyle(apt.type);
+                                  return (
+                                    <div 
+                                      key={apt.id}
+                                      draggable
+                                      onDragStart={(e) => handleDragStart(e, apt.id)}
+                                      onClick={() => openModal(apt)}
+                                      className={`
+                                        w-full p-4 rounded-2xl border-l-4 shadow-sm transition-all hover:shadow-md cursor-grab active:cursor-grabbing relative overflow-hidden group/card
+                                        ${style.border} ${style.bg}
+                                      `}
+                                    >
+                                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="hidden md:block">
+                                              <GripVertical size={16} className="text-slate-300 group-hover/card:text-slate-400" />
+                                            </div>
+                                            <div>
+                                              <div className="flex items-center gap-2">
+                                                  <span className="font-bold text-slate-900">{apt.patient?.name}</span>
+                                                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter ${style.badge}`}>
+                                                    {apt.type === 'first' ? 'Consulta' : apt.type === 'return' ? 'Retorno' : 'Exame'}
+                                                  </span>
+                                                  {apt.status === 'completed' && <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"><UserCheck size={10}/> CHEGOU</span>}
+                                              </div>
+                                              <div className="flex items-center gap-4 mt-1">
+                                                  <span className="text-[10px] text-slate-500 flex items-center gap-1"><Clock size={12}/> {apt.start_time} • Dr. {apt.doctor?.name.split(' ')[0]}</span>
+                                                  <span className="text-[10px] text-slate-400 font-medium">Plano: {apt.plan || 'Particular'}</span>
+                                              </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-2 opacity-0 group-hover/card:opacity-100 transition-all">
+                                            <button 
+                                              onClick={(e) => { e.stopPropagation(); navigate(`/patients/${apt.patient_id}`); }}
+                                              className="bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 hover:bg-slate-50 transition-colors"
+                                            >
+                                              <FileText size={10}/> Prontuário
+                                            </button>
+                                            <button 
+                                              onClick={(e) => handleDelete(apt.id, e)}
+                                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                            >
+                                              <Trash2 size={14}/>
+                                            </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                          </div>
+                        </div>
+                    ))}
+                    
+                    {/* Exemplo de Bloqueio (Opcional visual) */}
+                    <div className="flex min-h-[112px] bg-slate-50/50 border-b border-slate-100">
+                        <div className="w-24 flex-shrink-0 flex justify-center py-4 border-r border-slate-50">
+                          <span className="text-xs font-bold text-slate-300">12:00</span>
+                        </div>
+                        <div className="flex-1 p-4 flex items-center justify-center text-slate-400 gap-3 italic">
+                          <Clock size={16} className="opacity-30" />
+                          <span className="text-xs font-medium tracking-wide">Intervalo / Horário Almoço</span>
+                        </div>
+                    </div>
+                  </div>
+                </>
               )}
 
-              {/* Time Slots */}
-              <div className="relative bg-white">
-                 {timeSlots.map(time => (
-                    <div 
-                      key={time} 
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, time)}
-                      className="flex min-h-[56px] border-b border-slate-100 group"
-                    >
-                       <div className="w-24 flex-shrink-0 flex justify-center py-4 border-r border-slate-50">
-                          <span className="text-xs font-bold text-slate-400 group-hover:text-blue-600 transition-colors">{time}</span>
-                       </div>
-                       <div className="flex-1 p-2 relative">
-                          <div className="absolute inset-2 border-2 border-dashed border-slate-100 rounded-xl opacity-0 group-hover:opacity-100 transition-all pointer-events-none"></div>
-                          
-                          <div className="relative z-0 space-y-2">
-                            {filteredApts.filter(a => a.start_time === time).map(apt => {
-                              const style = getTypeStyle(apt.type);
-                              return (
-                                <div 
-                                  key={apt.id}
-                                  draggable
-                                  onDragStart={(e) => handleDragStart(e, apt.id)}
-                                  onClick={() => openModal(apt)}
-                                  className={`
-                                    w-full p-4 rounded-2xl border-l-4 shadow-sm transition-all hover:shadow-md cursor-grab active:cursor-grabbing relative overflow-hidden group/card
-                                    ${style.border} ${style.bg}
-                                  `}
-                                >
-                                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                                     <div className="flex items-center gap-4">
-                                        <div className="hidden md:block">
-                                           <GripVertical size={16} className="text-slate-300 group-hover/card:text-slate-400" />
-                                        </div>
-                                        <div>
-                                           <div className="flex items-center gap-2">
-                                              <span className="font-bold text-slate-900">{apt.patient?.name}</span>
-                                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter ${style.badge}`}>
-                                                 {apt.type === 'first' ? 'Consulta' : apt.type === 'return' ? 'Retorno' : 'Exame'}
-                                              </span>
-                                              {apt.status === 'completed' && <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"><UserCheck size={10}/> CHEGOU</span>}
-                                           </div>
-                                           <div className="flex items-center gap-4 mt-1">
-                                              <span className="text-[10px] text-slate-500 flex items-center gap-1"><Clock size={12}/> {apt.start_time} • Dr. {apt.doctor?.name.split(' ')[0]}</span>
-                                              <span className="text-[10px] text-slate-400 font-medium">Plano: {apt.plan || 'Particular'}</span>
-                                           </div>
-                                        </div>
-                                     </div>
+              {viewMode === 'week' && (
+                <div className="grid grid-cols-7 h-full bg-white">
+                  {eachDayOfInterval({
+                    start: startOfWeek(date, { weekStartsOn: 0 }),
+                    end: endOfWeek(date, { weekStartsOn: 0 }),
+                  }).map((day, i) => {
+                    const dayStr = format(day, 'yyyy-MM-dd');
+                    const dayApts = filteredApts.filter(a => a.date === dayStr).sort((a, b) => a.start_time.localeCompare(b.start_time));
+                    const isToday = isTodayFn(day);
 
-                                     <div className="flex gap-2 opacity-0 group-hover/card:opacity-100 transition-all">
-                                        <button 
-                                           onClick={(e) => { e.stopPropagation(); navigate(`/patients/${apt.patient_id}`); }}
-                                           className="bg-white border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-1.5 hover:bg-slate-50 transition-colors"
-                                        >
-                                           <FileText size={10}/> Prontuário
-                                        </button>
-                                        <button 
-                                          onClick={(e) => handleDelete(apt.id, e)}
-                                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                        >
-                                          <Trash2 size={14}/>
-                                        </button>
-                                     </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                    return (
+                      <div key={i} className={`border-r border-slate-100 min-h-[600px] flex flex-col ${isToday ? 'bg-blue-50/30' : ''}`}>
+                        <div className={`p-4 text-center border-b border-slate-100 ${isToday ? 'bg-blue-100/50' : 'bg-slate-50'}`}>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">{format(day, 'EEE', { locale: ptBR })}</p>
+                          <p className={`text-lg font-bold ${isToday ? 'text-blue-600' : 'text-slate-700'}`}>{format(day, 'd')}</p>
+                        </div>
+                        <div className="flex-1 p-2 space-y-2 overflow-y-auto">
+                          {dayApts.map(apt => {
+                            const style = getTypeStyle(apt.type);
+                            return (
+                              <div 
+                                key={apt.id}
+                                onClick={() => openModal(apt)}
+                                className={`p-2 rounded-xl border-l-4 shadow-sm cursor-pointer hover:shadow-md transition-all ${style.border} ${style.bg}`}
+                              >
+                                <p className="text-[10px] font-bold text-slate-900 truncate">{apt.patient?.name}</p>
+                                <p className="text-[9px] text-slate-500 flex items-center gap-1 mt-0.5">
+                                  <Clock size={8}/> {apt.start_time}
+                                </p>
+                              </div>
+                            );
+                          })}
+                          {dayApts.length === 0 && (
+                            <div className="h-full flex items-center justify-center opacity-20">
+                              <CalendarIcon size={24} className="text-slate-300" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {viewMode === 'month' && (
+                <div className="grid grid-cols-7 h-full bg-white">
+                  {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(d => (
+                    <div key={d} className="p-3 text-center border-b border-r border-slate-100 bg-slate-50 text-[10px] font-bold text-slate-400 uppercase">
+                      {d}
+                    </div>
+                  ))}
+                  {(() => {
+                    const monthStart = startOfMonth(date);
+                    const monthEnd = endOfMonth(monthStart);
+                    const startDate = startOfWeek(monthStart);
+                    const endDate = endOfWeek(monthEnd);
+                    
+                    return eachDayOfInterval({ start: startDate, end: endDate }).map((day, i) => {
+                      const dayStr = format(day, 'yyyy-MM-dd');
+                      const dayApts = filteredApts.filter(a => a.date === dayStr);
+                      const isToday = isTodayFn(day);
+                      const isCurrentMonth = isSameMonth(day, monthStart);
+
+                      return (
+                        <div 
+                          key={i} 
+                          onClick={() => { setDate(day); setViewMode('day'); }}
+                          className={`min-h-[120px] border-r border-b border-slate-100 p-2 transition-colors hover:bg-slate-50 cursor-pointer flex flex-col ${!isCurrentMonth ? 'bg-slate-50/50' : ''} ${isToday ? 'bg-blue-50/30' : ''}`}
+                        >
+                          <span className={`text-xs font-bold mb-2 ${isToday ? 'bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center' : isCurrentMonth ? 'text-slate-700' : 'text-slate-300'}`}>
+                            {format(day, 'd')}
+                          </span>
+                          <div className="flex-1 space-y-1 overflow-hidden">
+                            {dayApts.slice(0, 3).map(apt => (
+                              <div key={apt.id} className={`h-1.5 w-full rounded-full ${getTypeStyle(apt.type).dot}`}></div>
+                            ))}
+                            {dayApts.length > 3 && (
+                              <p className="text-[8px] font-bold text-slate-400 text-center">+{dayApts.length - 3} mais</p>
+                            )}
                           </div>
-                       </div>
-                    </div>
-                 ))}
-                 
-                 {/* Exemplo de Bloqueio (Opcional visual) */}
-                 <div className="flex min-h-[112px] bg-slate-50/50 border-b border-slate-100">
-                    <div className="w-24 flex-shrink-0 flex justify-center py-4 border-r border-slate-50">
-                       <span className="text-xs font-bold text-slate-300">12:00</span>
-                    </div>
-                    <div className="flex-1 p-4 flex items-center justify-center text-slate-400 gap-3 italic">
-                       <Clock size={16} className="opacity-30" />
-                       <span className="text-xs font-medium tracking-wide">Intervalo / Horário Almoço</span>
-                    </div>
-                 </div>
-
-              </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
            </div>
         </div>
       </div>

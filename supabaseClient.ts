@@ -225,9 +225,11 @@ export const api = {
   },
   
   // Appointments
-  getAppointments: async (date?: string) => {
+  getAppointments: async (date?: string, startDate?: string, endDate?: string) => {
     let query = supabase.from('appointments').select('*, patient:patients(name), doctor:users(name)');
     if (date) query = query.eq('date', date);
+    if (startDate) query = query.gte('date', startDate);
+    if (endDate) query = query.lte('date', endDate);
     return query;
   },
   

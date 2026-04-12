@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../supabaseClient';
 import { Patient, UserRole, MedicalDocument, PrescriptionItem } from '../types';
 import { useAuth } from '../App';
-import { Save, CheckCircle, ArrowLeft, Clock, AlertTriangle, FileText, Activity, ClipboardList, Stethoscope, ScrollText, PlusCircle, Printer, Trash2, X, ChevronDown } from 'lucide-react';
+import { Save, CheckCircle, ArrowLeft, Clock, AlertTriangle, FileText, Activity, ClipboardList, Stethoscope, ScrollText, PlusCircle, Printer, Trash2, X, ChevronDown, Eye } from 'lucide-react';
 import { useDialog } from '../components/Dialog';
 import RichTextEditor from '../components/RichTextEditor';
 
@@ -26,6 +26,7 @@ export default function AnamnesisSession() {
   // --- DOCUMENTOS RÁPIDOS STATE ---
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [showDocModal, setShowDocModal] = useState(false);
+  const [viewingDoc, setViewingDoc] = useState<MedicalDocument | null>(null);
   const [docType, setDocType] = useState<'prescription' | 'referral'>('prescription');
   const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItem[]>([{ medication: '', quantity: '', dosage: '', usageMode: 'Uso Oral' }]);
   const [referralText, setReferralText] = useState('');
@@ -326,6 +327,87 @@ EXT: SEM EDEMAS, SEM SINAIS DE TVP, TEC < 3S`
 
   return (
     <>
+      {/* --- VIEW DOCUMENT MODAL --- */}
+      {viewingDoc && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-scale-in overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                <Eye size={18} className="text-blue-600" />
+                Visualizar {viewingDoc.type === 'prescription' ? 'Receita' : 'Encaminhamento'}
+              </h3>
+              <button onClick={() => setViewingDoc(null)} className="p-1 hover:bg-slate-200 rounded-full transition-colors">
+                <X size={20} className="text-slate-500" />
+              </button>
+            </div>
+            
+            <div className="p-8 overflow-y-auto bg-white">
+              <div className="flex items-center gap-4 mb-8 pb-4 border-b border-slate-100">
+                <img src={HEADER_LOGO_URL} className="h-12 w-auto" />
+                <div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{viewingDoc.type === 'prescription' ? 'Receituário Simples' : 'Encaminhamento Médico'}</p>
+                  <p className="text-sm font-medium text-slate-600">Data: {new Date(viewingDoc.created_at).toLocaleDateString()}</p>
+                </div>
+              </div>
+
+              {viewingDoc.type === 'prescription' && viewingDoc.content.items ? (
+                <div className="space-y-6">
+                  {(() => {
+                    const grouped: Record<string, PrescriptionItem[]> = {};
+                    viewingDoc.content.items.forEach(item => {
+                      const mode = item.usageMode || 'Uso Geral';
+                      if (!grouped[mode]) grouped[mode] = [];
+                      grouped[mode].push(item);
+                    });
+                    return Object.entries(grouped).map(([mode, items]) => (
+                      <div key={mode} className="space-y-4">
+                        <h4 className="text-xs font-bold text-blue-900 uppercase border-b border-blue-100 pb-1">{mode}</h4>
+                        {items.map((item, idx) => (
+                          <div key={idx} className="pl-2">
+                            <div className="flex justify-between items-baseline border-b border-dashed border-slate-200 pb-1">
+                              <span className="font-bold text-slate-900 uppercase">{item.medication}</span>
+                              <span className="text-sm font-bold text-slate-700">{item.quantity}</span>
+                            </div>
+                            <p className="text-sm text-slate-600 mt-1 italic">{item.dosage}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              ) : (
+                <div 
+                  className="prose prose-slate max-w-none text-slate-800 leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: viewingDoc.content.text || '' }}
+                />
+              )}
+
+              <div className="mt-12 pt-8 border-t border-slate-100 text-center">
+                <div className="inline-block border-t border-slate-300 pt-1 px-8">
+                  <p className="font-bold text-slate-900">Dr. {viewingDoc.doctor?.name || user?.name}</p>
+                  <p className="text-xs text-slate-500">CRM: {viewingDoc.doctor?.crm || user?.crm || ''}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button 
+                onClick={() => setViewingDoc(null)}
+                className="px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Fechar
+              </button>
+              <button 
+                onClick={() => { handlePrintDocument(viewingDoc); setViewingDoc(null); }}
+                className="px-6 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-800 shadow-lg shadow-blue-900/20 font-bold text-sm flex items-center gap-2"
+              >
+                <Printer size={16} /> Imprimir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- DOCUMENT MODAL (Same as Profile) --- */}
       {showDocModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
@@ -613,6 +695,9 @@ EXT: SEM EDEMAS, SEM SINAIS DE TVP, TEC < 3S`
                        </div>
                     </div>
                     <div className="flex gap-2">
+                       <button onClick={() => setViewingDoc(doc)} className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-blue-600 transition-colors" title="Visualizar">
+                          <Eye size={16} />
+                       </button>
                        <button onClick={() => handlePrintDocument(doc)} className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-blue-600 transition-colors" title="Imprimir">
                           <Printer size={16} />
                        </button>
