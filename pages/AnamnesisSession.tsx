@@ -32,6 +32,24 @@ export default function AnamnesisSession() {
   const [referralText, setReferralText] = useState('');
   const [loadingDeleteDoc, setLoadingDeleteDoc] = useState<string | null>(null);
 
+  // --- REFS FOR TAB NAVIGATION ---
+  const sRef = useRef<any>(null);
+  const oRef = useRef<any>(null);
+  const aRef = useRef<any>(null);
+  const pRef = useRef<any>(null);
+
+  const handleTab = (currentField: string, shift: boolean) => {
+    const fields = ['s', 'o', 'a', 'p'];
+    const currentIndex = fields.indexOf(currentField);
+    const nextIndex = shift ? currentIndex - 1 : currentIndex + 1;
+    
+    if (nextIndex >= 0 && nextIndex < fields.length) {
+      const nextField = fields[nextIndex];
+      const refs: Record<string, any> = { s: sRef, o: oRef, a: aRef, p: pRef };
+      refs[nextField].current?.focus();
+    }
+  };
+
   const LOGO_URL = "https://i.ibb.co/n8rLsXSJ/upscalemedia-transformed-1.png";
   const HEADER_LOGO_URL = "https://i.ibb.co/sJR9zQKt/upscalemedia-transformed-1.png";
 
@@ -39,40 +57,6 @@ export default function AnamnesisSession() {
     'Uso Oral', 'Uso Tópico', 'Uso Endovenoso', 'Uso Intramuscular', 'Uso Subcutâneo',
     'Uso Intranasal', 'Uso Oftálmico', 'Uso Otológico', 'Uso Retal', 'Uso Vaginal',
     'Uso Inalatório', 'Uso Contínuo', 'Outro'
-  ];
-
-  // --- MODELOS (TEMPLATES) ---
-  const subjectiveTemplates = [
-    {
-      label: "Modelo Padrão",
-      content: `
-        <div><b>ID:</b> </div><br>
-        <div><b>QP:</b> </div><br>
-        <div><b>HDA:</b> </div><br>
-        <div><b>HI:</b> </div><br>
-        <div><b>HF:</b> </div><br>
-        <div><b>HEV:</b> </div><br>
-      `
-    }
-  ];
-
-  const objectiveTemplates = [
-    {
-      label: "Ex. Físico Masculino",
-      content: `BEG, LOTE, EUPNEICO, NORMOCORADO, ACIANÓTICO, AFEBRIL, ANICTÉRICO, HIDRATADO, FÂNEROS HIDRATADOS ECG: 15<br>
-AR: MV+ EM AHT, S/RA<br>
-ACV: RCR EM 2T, BNF, S/SA<br>
-ABD: RHA+ EM 9QD, S/ VMG OU CTZ, DEPRESSÍVEL, INDOLOR, BLUMBERG NEGATIVO, ROVSING NEGATIVO, MURPHY NEGATIVO.<br>
-EXT: SEM EDEMAS, SEM SINAIS DE TVP, TEC < 3S`
-    },
-    {
-      label: "Ex. Físico Feminino",
-      content: `BEG, LOTE, EUPNEICA, NORMOCORADA, ACIANÓTICA, AFEBRIL, ANICTÉRICA, HIDRATADA, FÂNEROS HIDRATADOS ECG: 15<br>
-AR: MV+ EM AHT, S/RA<br>
-ACV: RCR EM 2T, BNF, S/SA<br>
-ABD: RHA+ EM 9QD, S/ VMG OU CTZ, DEPRESSÍVEL, INDOLOR, BLUMBERG NEGATIVO, ROVSING NEGATIVO, MURPHY NEGATIVO.<br>
-EXT: SEM EDEMAS, SEM SINAIS DE TVP, TEC < 3S`
-    }
   ];
 
   // Load Patient and existing Anamnesis if editing
@@ -529,6 +513,7 @@ EXT: SEM EDEMAS, SEM SINAIS DE TVP, TEC < 3S`
                         value={referralText}
                         onChange={setReferralText}
                         placeholder="Descreva o encaminhamento, motivo, especialidade e observações clínicas..."
+                        fieldId="referral"
                         colorTheme="blue"
                       />
                    </div>
@@ -601,11 +586,13 @@ EXT: SEM EDEMAS, SEM SINAIS DE TVP, TEC < 3S`
              
              <div className="p-2">
                <RichTextEditor 
+                  ref={sRef}
                   value={soap.s} 
                   onChange={(v) => handleChange('s', v)}
                   placeholder="Descreva a história clínica, sintomas atuais e relatos do paciente..."
-                  templates={subjectiveTemplates}
+                  fieldId="s"
                   colorTheme="indigo"
+                  onTab={(shift) => handleTab('s', shift)}
                />
              </div>
           </section>
@@ -624,11 +611,13 @@ EXT: SEM EDEMAS, SEM SINAIS DE TVP, TEC < 3S`
 
              <div className="p-2">
                <RichTextEditor 
+                  ref={oRef}
                   value={soap.o} 
                   onChange={(v) => handleChange('o', v)}
                   placeholder="Registre os dados do exame físico, resultados de exames e observações clínicas..."
-                  templates={objectiveTemplates}
+                  fieldId="o"
                   colorTheme="emerald"
+                  onTab={(shift) => handleTab('o', shift)}
                />
              </div>
           </section>
@@ -647,10 +636,13 @@ EXT: SEM EDEMAS, SEM SINAIS DE TVP, TEC < 3S`
              
              <div className="p-2">
                <RichTextEditor 
+                  ref={aRef}
                   value={soap.a} 
                   onChange={(v) => handleChange('a', v)}
                   placeholder="Descreva sua análise do caso e possíveis diagnósticos..."
+                  fieldId="a"
                   colorTheme="amber"
+                  onTab={(shift) => handleTab('a', shift)}
                />
              </div>
           </section>
@@ -729,10 +721,13 @@ EXT: SEM EDEMAS, SEM SINAIS DE TVP, TEC < 3S`
              
              <div className="p-2">
                <RichTextEditor 
+                  ref={pRef}
                   value={soap.p} 
                   onChange={(v) => handleChange('p', v)}
                   placeholder="Prescrições, encaminhamentos, orientações educativas e agendamento de retorno..."
+                  fieldId="p"
                   colorTheme="blue"
+                  onTab={(shift) => handleTab('p', shift)}
                />
              </div>
           </section>

@@ -126,6 +126,24 @@ insert into users (username, password, role, name)
 values ('admin', 'admin', 'admin', 'Administrator') 
 on conflict (username) do nothing;
 
+create table if not exists routines (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references users(id) on delete cascade,
+  field_id text not null, -- 's', 'o', 'a', 'p'
+  name text not null,
+  shortcut text not null,
+  content text not null,
+  created_at timestamptz default now()
+);
+
+-- Fix routines Columns
+do $$ 
+begin 
+  if not exists (select 1 from information_schema.columns where table_name='routines' and column_name='field_id') then 
+    alter table routines add column field_id text; 
+  end if;
+end $$;
+
 -- 3. RLS POLICIES (Allow all for this demo app)
 alter table users enable row level security;
 drop policy if exists "Public access users" on users;
@@ -154,6 +172,10 @@ create policy "Public access messages" on messages for all using (true);
 alter table notifications enable row level security;
 drop policy if exists "Public access notifications" on notifications;
 create policy "Public access notifications" on notifications for all using (true);
+
+alter table routines enable row level security;
+drop policy if exists "Public access routines" on routines;
+create policy "Public access routines" on routines for all using (true);
 
 -- 4. POWERFUL DELETE FUNCTIONS (RPC)
 create or replace function delete_user_fully(target_id uuid)
@@ -297,4 +319,14 @@ export const api = {
   
   markNotificationRead: async (id: string) => supabase.from('notifications').update({ read: true }).eq('id', id),
   markAllNotificationsRead: async (userId: string) => supabase.from('notifications').update({ read: true }).eq('user_id', userId),
+
+  // Routines
+  getRoutines: async (userId: string, fieldId?: string) => {
+    let query = supabase.from('routines').select('*').eq('user_id', userId);
+    if (fieldId) query = query.eq('field_id', fieldId);
+    return query.order('name');
+  },
+  createRoutine: async (routine: any) => supabase.from('routines').insert(routine),
+  updateRoutine: async (id: string, updates: any) => supabase.from('routines').update(updates).eq('id', id),
+  deleteRoutine: async (id: string) => supabase.from('routines').delete().eq('id', id),
 };

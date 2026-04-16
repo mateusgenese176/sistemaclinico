@@ -239,7 +239,7 @@ export default function CalendarPage() {
                 <button onClick={() => setDate(addMonths(date, 1))} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 transition-colors"><ChevronRight size={18}/></button>
              </div>
              <div className="grid grid-cols-7 gap-1 text-center mb-2">
-                {['D','S','T','Q','Q','S','S'].map(d => <span key={d} className="text-[10px] font-bold text-slate-400">{d}</span>)}
+                {['D','S','T','Q','Q','S','S'].map((d, i) => <span key={`${d}-${i}`} className="text-[10px] font-bold text-slate-400">{d}</span>)}
              </div>
              <div className="grid grid-cols-7 gap-1">
                 {(() => {
@@ -253,14 +253,15 @@ export default function CalendarPage() {
                     end: endDate,
                   });
 
-                  return calendarDays.map((day, i) => {
+                  return calendarDays.map((day) => {
                     const isToday = isTodayFn(day);
                     const isSelected = isSameDay(day, date);
                     const isCurrentMonth = isSameMonth(day, monthStart);
+                    const dayKey = day.getTime();
 
                     return (
                       <button 
-                        key={i} 
+                        key={dayKey} 
                         onClick={() => setDate(day)}
                         className={`h-8 w-8 rounded-full text-xs flex items-center justify-center transition-all 
                           ${isSelected ? 'bg-blue-900 text-white font-bold' : isToday ? 'text-blue-600 font-bold bg-blue-50' : isCurrentMonth ? 'text-slate-600 hover:bg-slate-50' : 'text-slate-300 hover:bg-slate-50'}`}
@@ -488,13 +489,13 @@ export default function CalendarPage() {
                   {eachDayOfInterval({
                     start: startOfWeek(date, { weekStartsOn: 0 }),
                     end: endOfWeek(date, { weekStartsOn: 0 }),
-                  }).map((day, i) => {
+                  }).map((day) => {
                     const dayStr = format(day, 'yyyy-MM-dd');
                     const dayApts = filteredApts.filter(a => a.date === dayStr).sort((a, b) => a.start_time.localeCompare(b.start_time));
                     const isToday = isTodayFn(day);
 
                     return (
-                      <div key={i} className={`border-r border-slate-100 min-h-[600px] flex flex-col ${isToday ? 'bg-blue-50/30' : ''}`}>
+                      <div key={dayStr} className={`border-r border-slate-100 min-h-[600px] flex flex-col ${isToday ? 'bg-blue-50/30' : ''}`}>
                         <div className={`p-4 text-center border-b border-slate-100 ${isToday ? 'bg-blue-100/50' : 'bg-slate-50'}`}>
                           <p className="text-[10px] font-bold text-slate-400 uppercase">{format(day, 'EEE', { locale: ptBR })}</p>
                           <p className={`text-lg font-bold ${isToday ? 'text-blue-600' : 'text-slate-700'}`}>{format(day, 'd')}</p>
@@ -540,7 +541,7 @@ export default function CalendarPage() {
                     const startDate = startOfWeek(monthStart);
                     const endDate = endOfWeek(monthEnd);
                     
-                    return eachDayOfInterval({ start: startDate, end: endDate }).map((day, i) => {
+                    return eachDayOfInterval({ start: startDate, end: endDate }).map((day) => {
                       const dayStr = format(day, 'yyyy-MM-dd');
                       const dayApts = filteredApts.filter(a => a.date === dayStr);
                       const isToday = isTodayFn(day);
@@ -548,7 +549,7 @@ export default function CalendarPage() {
 
                       return (
                         <div 
-                          key={i} 
+                          key={dayStr} 
                           onClick={() => { setDate(day); setViewMode('day'); }}
                           className={`min-h-[120px] border-r border-b border-slate-100 p-2 transition-colors hover:bg-slate-50 cursor-pointer flex flex-col ${!isCurrentMonth ? 'bg-slate-50/50' : ''} ${isToday ? 'bg-blue-50/30' : ''}`}
                         >
