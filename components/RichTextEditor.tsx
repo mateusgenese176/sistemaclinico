@@ -128,7 +128,10 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
   };
 
   const handleSaveRoutine = async () => {
-    if (!user || !routineForm.name || !routineForm.shortcut || !routineForm.content) return;
+    if (!user || !routineForm.name || !routineForm.shortcut || !routineForm.content || !fieldId) {
+      console.error("Missing required fields for routine:", { user: !!user, name: !!routineForm.name, shortcut: !!routineForm.shortcut, content: !!routineForm.content, fieldId: !!fieldId });
+      return;
+    }
     
     const payload = {
       ...routineForm,
