@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../supabaseClient';
 import { Patient, UserRole, MedicalDocument, PrescriptionItem } from '../types';
 import { useAuth } from '../App';
-import { Save, CheckCircle, ArrowLeft, Clock, AlertTriangle, FileText, Activity, ClipboardList, Stethoscope, ScrollText, PlusCircle, Printer, Trash2, X, ChevronDown, Eye } from 'lucide-react';
+import { Save, CheckCircle, ArrowLeft, Clock, AlertTriangle, FileText, Activity, ClipboardList, Stethoscope, ScrollText, PlusCircle, Printer, Trash2, X, ChevronDown, Eye, Copy } from 'lucide-react';
 import { useDialog } from '../components/Dialog';
 import RichTextEditor from '../components/RichTextEditor';
 
@@ -91,6 +91,16 @@ export default function AnamnesisSession() {
       // Filter primarily for today or recent to be relevant to the session
       setDocuments((data as any) || []);
     }
+  };
+
+  const handleCopyDocument = (doc: MedicalDocument) => {
+    setDocType(doc.type as 'prescription' | 'referral');
+    if (doc.type === 'prescription') {
+      setPrescriptionItems([...(doc.content.items || [{ medication: '', quantity: '', dosage: '', usageMode: 'Uso Oral' }])]);
+    } else {
+      setReferralText(doc.content.text || '');
+    }
+    setShowDocModal(true);
   };
 
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -728,6 +738,9 @@ export default function AnamnesisSession() {
                     <div className="flex gap-2">
                        <button onClick={() => setViewingDoc(doc)} className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-blue-600 transition-colors" title="Visualizar">
                           <Eye size={16} />
+                       </button>
+                       <button onClick={() => handleCopyDocument(doc)} className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-blue-600 transition-colors" title="Copiar para novo">
+                          <Copy size={16} />
                        </button>
                        <button onClick={() => handlePrintDocument(doc)} className="p-1.5 hover:bg-slate-100 rounded text-slate-500 hover:text-blue-600 transition-colors" title="Imprimir">
                           <Printer size={16} />

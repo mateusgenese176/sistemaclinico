@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../supabaseClient';
 import { Patient, Anamnesis, UserRole, MedicalDocument, PrescriptionItem } from '../types';
 import { useAuth } from '../App';
-import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader, Eye, X, Upload, Check, FilePlus, ScrollText, MapPin, ChevronDown } from 'lucide-react';
+import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader, Eye, X, Upload, Check, FilePlus, ScrollText, MapPin, ChevronDown, Copy } from 'lucide-react';
 import { useDialog } from '../components/Dialog';
 import RichTextEditor from '../components/RichTextEditor';
 
@@ -214,6 +214,16 @@ export default function PatientProfile() {
     } finally {
       setLoadingDelete(null);
     }
+  };
+
+  const handleCopyDocument = (doc: MedicalDocument) => {
+    setDocType(doc.type as 'prescription' | 'referral');
+    if (doc.type === 'prescription') {
+      setPrescriptionItems([...(doc.content.items || [{ medication: '', quantity: '', dosage: '', usageMode: 'Uso Oral' }])]);
+    } else {
+      setReferralText(doc.content.text || '');
+    }
+    setShowDocModal(true);
   };
 
   const handleEditAnamnesis = (anamnesisId: string) => {
@@ -1064,6 +1074,15 @@ export default function PatientProfile() {
                                       title="Visualizar"
                                    >
                                       <Eye size={20} />
+                                    </button>
+                                    <button 
+                                       onClick={() => handleCopyDocument(doc)}
+                                       className="p-2 text-slate-400 hover:text-blue-900 hover:bg-blue-50 rounded transition-colors"
+                                       title="Copiar para novo"
+                                    >
+                                       <Copy size={20} />
+                                    </button>
+                                    <button style={{display:'none'}}>
                                    </button>
                                    <button 
                                       onClick={() => handlePrintDocument(doc)}
