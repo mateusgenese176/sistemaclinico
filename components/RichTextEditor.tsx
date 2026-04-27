@@ -18,6 +18,7 @@ interface RichTextEditorProps {
   fieldId: string;
   colorTheme?: 'indigo' | 'emerald' | 'amber' | 'blue';
   onTab?: (shift: boolean) => void;
+  className?: string;
 }
 
 const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({ 
@@ -26,7 +27,8 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
   placeholder, 
   fieldId,
   colorTheme = 'blue',
-  onTab
+  onTab,
+  className = ''
 }, ref) => {
   const { user } = useAuth();
   const editorRef = useRef<HTMLDivElement>(null);
@@ -48,6 +50,7 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
   
   const [routineForm, setRoutineForm] = useState({ name: '', shortcut: '', content: '' });
   const [searchTerm, setSearchTerm] = useState('');
+  const lastContextMenuClick = useRef<{ time: number } | null>(null);
 
   useEffect(() => {
     fetchRoutines();
@@ -124,7 +127,15 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
 
   const handleContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
-    setShowContextMenu({ x: e.clientX, y: e.clientY });
+    const now = Date.now();
+    const DOUBLE_CLICK_DELAY = 500; // ms
+
+    if (lastContextMenuClick.current && (now - lastContextMenuClick.current.time < DOUBLE_CLICK_DELAY)) {
+      setShowContextMenu({ x: e.clientX, y: e.clientY });
+      lastContextMenuClick.current = null;
+    } else {
+      lastContextMenuClick.current = { time: now };
+    }
   };
 
   const handleSaveRoutine = async () => {
@@ -182,7 +193,7 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
 
   return (
     <div 
-      className={`relative border rounded-xl bg-white overflow-hidden transition-all focus-within:ring-4 ${themeColors[colorTheme]}`}
+      className={`relative border rounded-xl bg-white overflow-hidden transition-all focus-within:ring-4 flex flex-col ${themeColors[colorTheme]} ${className}`}
       onContextMenu={handleContextMenu}
     >
       {/* Context Menu */}
@@ -239,12 +250,13 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Texto de rotina</label>
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="border border-slate-200 rounded-lg overflow-hidden h-[300px]">
                   <RichTextEditor 
                     value={routineForm.content}
                     onChange={v => setRoutineForm({...routineForm, content: v})}
                     fieldId="routine_editor"
                     colorTheme="blue"
+                    className="h-full border-none rounded-none"
                   />
                 </div>
               </div>
@@ -280,14 +292,17 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {routines.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase())).map(r => (
-                <div key={r.id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-blue-200 hover:bg-blue-50/30 transition-all group">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-500 font-bold text-xs">
+                <div key={r.id} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-xl hover:border-blue-200 hover:bg-blue-50/30 transition-all group group/item">
+                  <div 
+                    className="flex items-center gap-3 cursor-pointer flex-1"
+                    onClick={() => { insertHTML(r.content); setShowExploreModal(false); }}
+                  >
+                    <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-500 font-bold text-xs group-hover/item:bg-blue-100 group-hover/item:text-blue-700 transition-colors">
                       {r.shortcut.toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-slate-800">{r.name}</p>
-                      <p className="text-[10px] text-slate-400">Atalho: Ctrl + {r.shortcut.toUpperCase()}</p>
+                      <p className="text-sm font-bold text-slate-800 group-hover/item:text-blue-900">{r.name}</p>
+                      <p className="text-[10px] text-slate-400">Atalho: Ctrl + {r.shortcut.toUpperCase()} • Clique para inserir</p>
                     </div>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
@@ -327,7 +342,7 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
       )}
 
       {/* Toolbar */}
-      <div className="flex items-center gap-1 p-2 border-b border-slate-100 bg-slate-50/50 flex-wrap">
+      <div className="flex items-center gap-1 p-2 border-b border-slate-100 bg-slate-50/50 flex-wrap sticky top-0 z-10">
         <button onClick={() => execCommand('bold')} className={buttonClass} title="Negrito">
           <Bold size={16} />
         </button>
@@ -363,7 +378,7 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
         contentEditable
         onInput={handleInput}
         onKeyDown={handleKeyDown}
-        className="p-6 min-h-[160px] outline-none text-slate-700 text-sm leading-relaxed prose prose-sm max-w-none"
+        className={`p-6 outline-none text-slate-700 text-sm leading-relaxed prose prose-sm max-w-none flex-1 overflow-y-auto ${fieldId === 'routine_editor' ? 'min-h-[250px]' : 'min-h-[160px]'}`}
         style={{ whiteSpace: 'pre-wrap' }}
       />
       
