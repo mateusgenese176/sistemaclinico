@@ -2,9 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../supabaseClient';
 import { Patient } from '../types';
-import { Search, Plus, User, FileText, Calendar, Trash2, Loader, LayoutGrid, List, ScrollText, Clock } from 'lucide-react';
+import { Search, Plus, User, FileText, Calendar, Trash2, Loader, LayoutGrid, List, ScrollText, Clock, Pencil } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useDialog } from '../components/Dialog';
+import PatientEditModal from '../components/PatientEditModal';
 
 interface PatientMeta {
   hasHistory: boolean;
@@ -14,6 +15,7 @@ interface PatientMeta {
 
 export default function PatientsPage() {
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
   const [meta, setMeta] = useState<Record<string, PatientMeta>>({});
   const [loadingData, setLoadingData] = useState(true);
   
@@ -96,6 +98,10 @@ export default function PatientsPage() {
     }
   };
 
+  const handleSaveEditedPatient = (updated: Patient) => {
+    setPatients(prev => prev.map(p => p.id === updated.id ? updated : p));
+  };
+
   const renderIndicators = (patientId: string) => {
      const data = meta[patientId];
      if (!data) return null;
@@ -175,7 +181,17 @@ export default function PatientsPage() {
               onClick={() => navigate(`/patients/${p.id}`)}
               className="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-all cursor-pointer group hover:border-blue-200 relative"
             >
-              <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+              <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingPatient(p);
+                  }}
+                  className="p-2 text-slate-400 hover:text-blue-900 hover:bg-blue-50 rounded-full transition-colors"
+                  title="Editar Paciente"
+                >
+                  <Pencil size={18} />
+                </button>
                 <button 
                   onClick={(e) => handleDelete(p.id, e)} 
                   disabled={deletingId === p.id}
@@ -248,7 +264,17 @@ export default function PatientsPage() {
                        </td>
                        <td className="px-6 py-4 font-mono text-slate-600">{p.cpf || '-'}</td>
                        <td className="px-6 py-4 text-slate-600">{p.contact || '-'}</td>
-                       <td className="px-6 py-4 text-right">
+                       <td className="px-6 py-4 text-right flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                           <button 
+                              onClick={(e) => {
+                                 e.stopPropagation();
+                                 setEditingPatient(p);
+                              }}
+                              className="text-slate-400 hover:text-blue-900 p-2 hover:bg-blue-50 rounded transition-colors mr-1.5"
+                              title="Editar Paciente"
+                           >
+                              <Pencil size={16} />
+                           </button>
                           <button 
                              onClick={(e) => handleDelete(p.id, e)}
                              disabled={deletingId === p.id}
@@ -269,6 +295,15 @@ export default function PatientsPage() {
           <User size={48} className="mx-auto mb-3 opacity-20" />
           <p>Nenhum paciente encontrado.</p>
         </div>
+      )}
+
+      {editingPatient && (
+        <PatientEditModal 
+          patient={editingPatient} 
+          isOpen={!!editingPatient} 
+          onClose={() => setEditingPatient(null)} 
+          onSave={handleSaveEditedPatient} 
+        />
       )}
     </div>
   );

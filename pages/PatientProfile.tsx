@@ -6,6 +6,7 @@ import { useAuth } from '../App';
 import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil, Trash2, Loader, Eye, X, Upload, Check, FilePlus, ScrollText, MapPin, ChevronDown, Copy } from 'lucide-react';
 import { useDialog } from '../components/Dialog';
 import RichTextEditor from '../components/RichTextEditor';
+import PatientEditModal from '../components/PatientEditModal';
 
 export default function PatientProfile() {
   const { id } = useParams();
@@ -13,6 +14,7 @@ export default function PatientProfile() {
   const { user } = useAuth();
   const dialog = useDialog();
   const [patient, setPatient] = useState<Patient | null>(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [history, setHistory] = useState<Anamnesis[]>([]);
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
   const [activeTab, setActiveTab] = useState<'details' | 'anamnesis' | 'documents'>('details');
@@ -75,6 +77,10 @@ export default function PatientProfile() {
       fetchHistory();
     }
   }, [id, user]);
+
+  const handleSaveEditedPatient = (updated: Patient) => {
+    setPatient(updated);
+  };
 
   // Camera Cleanup on Unmount
   useEffect(() => {
@@ -831,6 +837,14 @@ export default function PatientProfile() {
                   <p className="text-slate-500 text-sm">CPF: {patient.cpf || 'N/A'}</p>
                   <p className="text-blue-900 text-xs font-bold mt-1 uppercase tracking-wider">Plano: {patient.insurance_plan || 'Particular'}</p>
                   
+                  <button 
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                    title="Editar Informações do Paciente"
+                  >
+                    <Pencil size={14} /> Editar Cadastro
+                  </button>
+                  
                   <div className="flex justify-center flex-wrap gap-2 mt-4">
                     {patient.tags?.map(tag => (
                       <span key={tag} className="px-3 py-1 bg-blue-50 text-blue-800 rounded-full text-xs font-medium uppercase tracking-wider flex items-center gap-1 group/tag">
@@ -1118,6 +1132,14 @@ export default function PatientProfile() {
           </div>
         </div>
       </div>
+      {patient && (
+        <PatientEditModal 
+          patient={patient} 
+          isOpen={isEditModalOpen} 
+          onClose={() => setIsEditModalOpen(false)} 
+          onSave={handleSaveEditedPatient} 
+        />
+      )}
     </>
   );
 }
