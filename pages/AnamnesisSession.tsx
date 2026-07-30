@@ -245,7 +245,7 @@ export default function AnamnesisSession() {
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
                 <Eye size={18} className="text-blue-600" />
-                Visualizar {viewingDoc.type === 'prescription' ? 'Receita' : viewingDoc.type === 'referral' ? 'Encaminhamento' : 'Solicitação de Exames'}
+                Visualizar {viewingDoc.type === 'prescription' ? 'Receita Simples' : viewingDoc.type === 'special_prescription' ? 'Receita Especial' : viewingDoc.type === 'referral' ? 'Encaminhamento' : 'Solicitação de Exames'}
               </h3>
               <button onClick={() => setViewingDoc(null)} className="p-1 hover:bg-slate-200 rounded-full transition-colors">
                 <X size={20} className="text-slate-500" />
@@ -257,13 +257,13 @@ export default function AnamnesisSession() {
                 <img src={HEADER_LOGO_URL} className="h-12 w-auto" />
                 <div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                    {viewingDoc.type === 'prescription' ? 'Receituário Simples' : viewingDoc.type === 'referral' ? 'Encaminhamento Médico' : 'Solicitação de Exames'}
+                    {viewingDoc.type === 'prescription' ? 'Receituário Simples' : viewingDoc.type === 'special_prescription' ? 'Receituário de Controle Especial (2 Vias)' : viewingDoc.type === 'referral' ? 'Encaminhamento Médico' : 'Solicitação de Exames'}
                   </p>
                   <p className="text-sm font-medium text-slate-600">Data: {new Date(viewingDoc.created_at).toLocaleDateString()}</p>
                 </div>
               </div>
 
-              {viewingDoc.type === 'prescription' && viewingDoc.content.items ? (
+              {(viewingDoc.type === 'prescription' || viewingDoc.type === 'special_prescription') && viewingDoc.content.items ? (
                 <div className="space-y-6">
                   {(() => {
                     const grouped: Record<string, PrescriptionItem[]> = {};

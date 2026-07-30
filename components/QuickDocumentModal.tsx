@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MedicalDocument, PrescriptionItem, User } from '../types';
 import { api } from '../supabaseClient';
 import { UNIQUE_LAB_EXAMS, UNIQUE_IMAGE_EXAMS } from '../data/examsData';
-import { X, Plus, PlusCircle, Trash2, ChevronDown, Search, Check, Printer, FileText, Activity } from 'lucide-react';
+import { X, Plus, PlusCircle, Trash2, ChevronDown, Search, Check, Printer, FileText, Activity, ShieldAlert } from 'lucide-react';
 import { useDialog } from './Dialog';
 
 interface QuickDocumentModalProps {
@@ -10,7 +10,7 @@ interface QuickDocumentModalProps {
   onClose: () => void;
   patientId: string;
   doctor: User;
-  initialType?: 'prescription' | 'referral' | 'exam';
+  initialType?: 'prescription' | 'special_prescription' | 'referral' | 'exam';
   initialDoc?: MedicalDocument | null;
   onSaveSuccess: () => void;
   onPrintAfterSave?: (doc: MedicalDocument) => void;
@@ -33,7 +33,7 @@ export default function QuickDocumentModal({
   onPrintAfterSave
 }: QuickDocumentModalProps) {
   const dialog = useDialog();
-  const [docType, setDocType] = useState<'prescription' | 'referral' | 'exam'>(initialType);
+  const [docType, setDocType] = useState<'prescription' | 'special_prescription' | 'referral' | 'exam'>(initialType);
   const [loading, setLoading] = useState(false);
 
   // Receituário State
@@ -56,7 +56,7 @@ export default function QuickDocumentModal({
   useEffect(() => {
     if (initialDoc) {
       setDocType(initialDoc.type);
-      if (initialDoc.type === 'prescription') {
+      if (initialDoc.type === 'prescription' || initialDoc.type === 'special_prescription') {
         setPrescriptionItems(initialDoc.content.items || [{ medication: '', quantity: '', dosage: '', usageMode: 'Uso Oral' }]);
       } else if (initialDoc.type === 'referral') {
         setReferralText(initialDoc.content.text || '');
@@ -159,7 +159,7 @@ export default function QuickDocumentModal({
         patient_id: patientId,
         doctor_id: doctor.id,
         type: docType,
-        content: docType === 'prescription' 
+        content: (docType === 'prescription' || docType === 'special_prescription') 
           ? { items: prescriptionItems } 
           : docType === 'referral' 
             ? { text: referralText }
@@ -222,48 +222,69 @@ export default function QuickDocumentModal({
         <div className="p-6 flex-1 overflow-y-auto space-y-6">
           
           {/* Main Document Type Selector */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
             <button
               type="button"
               onClick={() => setDocType('prescription')}
-              className={`py-3 px-4 rounded-xl border-2 font-bold transition-all text-sm flex items-center justify-center gap-2 ${
+              className={`py-3 px-3 rounded-xl border-2 font-bold transition-all text-xs sm:text-sm flex items-center justify-center gap-1.5 ${
                 docType === 'prescription'
                   ? 'border-blue-900 bg-blue-50 text-blue-900 shadow-sm'
                   : 'border-slate-200 text-slate-500 hover:bg-slate-50'
               }`}
             >
-              <FileText size={18} />
-              Receituário
+              <FileText size={16} />
+              Receita Simples
+            </button>
+            <button
+              type="button"
+              onClick={() => setDocType('special_prescription')}
+              className={`py-3 px-3 rounded-xl border-2 font-bold transition-all text-xs sm:text-sm flex items-center justify-center gap-1.5 ${
+                docType === 'special_prescription'
+                  ? 'border-purple-800 bg-purple-50 text-purple-900 shadow-sm'
+                  : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <ShieldAlert size={16} className="text-purple-700" />
+              Receita Especial
             </button>
             <button
               type="button"
               onClick={() => setDocType('referral')}
-              className={`py-3 px-4 rounded-xl border-2 font-bold transition-all text-sm flex items-center justify-center gap-2 ${
+              className={`py-3 px-3 rounded-xl border-2 font-bold transition-all text-xs sm:text-sm flex items-center justify-center gap-1.5 ${
                 docType === 'referral'
                   ? 'border-blue-900 bg-blue-50 text-blue-900 shadow-sm'
                   : 'border-slate-200 text-slate-500 hover:bg-slate-50'
               }`}
             >
-              <FileText size={18} />
+              <FileText size={16} />
               Encaminhamento
             </button>
             <button
               type="button"
               onClick={() => setDocType('exam')}
-              className={`py-3 px-4 rounded-xl border-2 font-bold transition-all text-sm flex items-center justify-center gap-2 ${
+              className={`py-3 px-3 rounded-xl border-2 font-bold transition-all text-xs sm:text-sm flex items-center justify-center gap-1.5 ${
                 docType === 'exam'
                   ? 'border-blue-900 bg-blue-50 text-blue-900 shadow-sm'
                   : 'border-slate-200 text-slate-500 hover:bg-slate-50'
               }`}
             >
-              <Activity size={18} />
+              <Activity size={16} />
               Exames
             </button>
           </div>
 
-          {/* PRESCRIPTION FORM */}
-          {docType === 'prescription' && (
+          {/* PRESCRIPTION FORM (SIMPLES OU ESPECIAL) */}
+          {(docType === 'prescription' || docType === 'special_prescription') && (
             <div className="space-y-6">
+              {docType === 'special_prescription' && (
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-3.5 text-xs text-purple-900 flex items-center gap-3 shadow-xs">
+                  <ShieldAlert size={18} className="text-purple-700 shrink-0" />
+                  <div>
+                    <span className="font-bold block">Receituário de Controle Especial (Duas Vias):</span>
+                    Imprime automaticamente em 2 vias (1ª Via - Farmácia e 2ª Via - Paciente) com layout regulamentar contendo Identificação do Emitente, Comprador e Fornecedor.
+                  </div>
+                </div>
+              )}
               {prescriptionItems.map((item, idx) => (
                 <div key={idx} className="flex flex-col md:flex-row gap-2 items-start bg-slate-50 p-4 rounded-xl border border-slate-200 group shadow-sm">
                   <div className="flex-1 grid grid-cols-1 md:grid-cols-6 gap-3 w-full">

@@ -27,8 +27,8 @@ export default function PatientProfile() {
   const [viewingDoc, setViewingDoc] = useState<MedicalDocument | null>(null);
 
   // Document Modal State
-  const [showDocModal, setShowDocModal] = useState(false);
-  const [initialDocType, setInitialDocType] = useState<'prescription' | 'referral' | 'exam'>('prescription');
+  const [showDocModal, setShowDocModal] = useState<boolean>(false);
+  const [initialDocType, setInitialDocType] = useState<'prescription' | 'special_prescription' | 'referral' | 'exam'>('prescription');
   const [selectedDocForCopy, setSelectedDocForCopy] = useState<MedicalDocument | null>(null);
   
   // Prescription State
@@ -847,54 +847,69 @@ export default function PatientProfile() {
                     )}
 
                     {activeTab === 'documents' && (
-                       <div className="space-y-6">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                             <button 
-                                onClick={() => {
-                                   setSelectedDocForCopy(null);
-                                   setInitialDocType('prescription');
-                                   setShowDocModal(true);
-                                }} 
-                                className="p-4 border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 hover:border-indigo-400 rounded-xl text-indigo-900 transition-all font-bold flex items-center justify-center gap-2"
-                             >
-                                <FilePlus size={20} /> Nova Receita
-                             </button>
-                             <button 
-                                onClick={() => {
-                                   setSelectedDocForCopy(null);
-                                   setInitialDocType('referral');
-                                   setShowDocModal(true);
-                                }} 
-                                className="p-4 border-2 border-dashed border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 hover:border-emerald-400 rounded-xl text-emerald-900 transition-all font-bold flex items-center justify-center gap-2"
-                             >
-                                <FilePlus size={20} /> Novo Encaminhamento
-                             </button>
-                             <button 
-                                onClick={() => {
-                                   setSelectedDocForCopy(null);
-                                   setInitialDocType('exam');
-                                   setShowDocModal(true);
-                                }} 
-                                className="p-4 border-2 border-dashed border-amber-200 bg-amber-50/50 hover:bg-amber-50 hover:border-amber-400 rounded-xl text-amber-900 transition-all font-bold flex items-center justify-center gap-2"
-                             >
-                                <FilePlus size={20} /> Novo Exame
-                             </button>
-                          </div>
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                           <button 
+                              onClick={() => {
+                                 setSelectedDocForCopy(null);
+                                 setInitialDocType('prescription');
+                                 setShowDocModal(true);
+                              }} 
+                              className="p-3.5 border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 hover:border-indigo-400 rounded-xl text-indigo-900 transition-all font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5"
+                           >
+                              <FilePlus size={18} /> Receita Simples
+                           </button>
+                           <button 
+                              onClick={() => {
+                                 setSelectedDocForCopy(null);
+                                 setInitialDocType('special_prescription');
+                                 setShowDocModal(true);
+                              }} 
+                              className="p-3.5 border-2 border-dashed border-purple-200 bg-purple-50/50 hover:bg-purple-50 hover:border-purple-400 rounded-xl text-purple-900 transition-all font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5"
+                           >
+                              <FilePlus size={18} /> Receita Especial
+                           </button>
+                           <button 
+                              onClick={() => {
+                                 setSelectedDocForCopy(null);
+                                 setInitialDocType('referral');
+                                 setShowDocModal(true);
+                              }} 
+                              className="p-3.5 border-2 border-dashed border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 hover:border-emerald-400 rounded-xl text-emerald-900 transition-all font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5"
+                           >
+                              <FilePlus size={18} /> Encaminhamento
+                           </button>
+                           <button 
+                              onClick={() => {
+                                 setSelectedDocForCopy(null);
+                                 setInitialDocType('exam');
+                                 setShowDocModal(true);
+                              }} 
+                              className="p-3.5 border-2 border-dashed border-amber-200 bg-amber-50/50 hover:bg-amber-50 hover:border-amber-400 rounded-xl text-amber-900 transition-all font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5"
+                           >
+                              <FilePlus size={18} /> Solicitar Exame
+                           </button>
+                        </div>
 
-                          {documents.map(doc => (
-                             <div key={doc.id} className="border border-slate-200 rounded-xl p-5 hover:shadow-lg transition-all bg-white flex justify-between items-center group">
-                                <div className="flex items-center gap-4">
-                                   <div className={`p-3 rounded-lg ${doc.type === 'prescription' ? 'bg-indigo-50 text-indigo-700' : doc.type === 'referral' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                                      <ScrollText size={24} />
-                                   </div>
-                                   <div>
-                                      <p className="font-bold text-slate-800 text-lg capitalize">
-                                         {doc.type === 'prescription' ? 'Receituário' : doc.type === 'referral' ? 'Encaminhamento' : 'Solicitação de Exames'}
-                                      </p>
-                                      <p className="text-xs text-slate-500">Dr. {doc.doctor?.name} • {new Date(doc.created_at).toLocaleDateString()}</p>
-                                   </div>
-                                </div>
-                                <div className="flex gap-2">
+                        {documents.map(doc => (
+                           <div key={doc.id} className="border border-slate-200 rounded-xl p-5 hover:shadow-lg transition-all bg-white flex justify-between items-center group">
+                              <div className="flex items-center gap-4">
+                                 <div className={`p-3 rounded-lg ${
+                                    doc.type === 'prescription' ? 'bg-indigo-50 text-indigo-700' : 
+                                    doc.type === 'special_prescription' ? 'bg-purple-50 text-purple-700' : 
+                                    doc.type === 'referral' ? 'bg-emerald-50 text-emerald-700' : 
+                                    'bg-amber-50 text-amber-700'
+                                 }`}>
+                                    <ScrollText size={24} />
+                                 </div>
+                                 <div>
+                                    <p className="font-bold text-slate-800 text-base sm:text-lg">
+                                       {doc.type === 'prescription' ? 'Receituário Simples' : doc.type === 'special_prescription' ? 'Receita Especial (Controle Especial)' : doc.type === 'referral' ? 'Encaminhamento' : 'Solicitação de Exames'}
+                                    </p>
+                                    <p className="text-xs text-slate-500">Dr. {doc.doctor?.name} • {new Date(doc.created_at).toLocaleDateString()}</p>
+                                 </div>
+                              </div>
+                              <div className="flex gap-2">
                                    <button 
                                       onClick={() => setViewingDoc(doc)}
                                       className="p-2 text-slate-400 hover:text-blue-900 hover:bg-blue-50 rounded transition-colors"

@@ -95,7 +95,7 @@ export interface MedicalDocument {
   id: string;
   patient_id: string;
   doctor_id: string;
-  type: 'prescription' | 'referral' | 'exam'; // Receituário, Encaminhamento ou Solicitação de Exame
+  type: 'prescription' | 'special_prescription' | 'referral' | 'exam'; // Receituário Simples, Receita Especial, Encaminhamento ou Exame
   content: {
     items?: PrescriptionItem[]; // Para receituário
     text?: string; // Para encaminhamento (HTML Rich Text)
