@@ -24,6 +24,14 @@ export interface Address {
   state: string;
 }
 
+export interface MedicalHistory {
+  allergies?: string[];
+  comorbidities?: string[];
+  continuous_medications?: string[];
+  surgeries?: string[];
+  hospitalizations?: string[];
+}
+
 export interface Patient {
   id: string;
   name: string;
@@ -35,6 +43,7 @@ export interface Patient {
   tags?: string[]; // stored as text[] in supabase
   insurance_plan?: string;
   anthropometrics?: Anthropometrics;
+  medical_history?: MedicalHistory;
   photo_url?: string; // Base64 string or URL
 }
 

@@ -3,10 +3,12 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../supabaseClient';
 import { Patient, UserRole, MedicalDocument, PrescriptionItem } from '../types';
 import { useAuth } from '../App';
-import { Save, CheckCircle, ArrowLeft, Clock, AlertTriangle, FileText, Activity, ClipboardList, Stethoscope, ScrollText, PlusCircle, Printer, Trash2, X, ChevronDown, Eye, Copy } from 'lucide-react';
+import { Save, CheckCircle, ArrowLeft, Clock, AlertTriangle, FileText, Activity, ClipboardList, Stethoscope, ScrollText, PlusCircle, Printer, Trash2, X, ChevronDown, Eye, Copy, User } from 'lucide-react';
 import { useDialog } from '../components/Dialog';
 import RichTextEditor from '../components/RichTextEditor';
 import QuickDocumentModal from '../components/QuickDocumentModal';
+import PatientProfileSidebar from '../components/PatientProfileSidebar';
+import PatientEditModal from '../components/PatientEditModal';
 import { printMedicalDocument, HEADER_LOGO_URL } from '../utils/printDocument';
 
 export default function AnamnesisSession() {
@@ -24,6 +26,10 @@ export default function AnamnesisSession() {
   const [anamnesisId, setAnamnesisId] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // --- RETRACTABLE SIDEBAR STATE & PATIENT EDIT ---
+  const [showPatientSidebar, setShowPatientSidebar] = useState(true);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   // --- DOCUMENTOS RÁPIDOS STATE ---
   const [documents, setDocuments] = useState<MedicalDocument[]>([]);
@@ -210,6 +216,17 @@ export default function AnamnesisSession() {
 
   return (
     <>
+      {/* --- PATIENT EDIT MODAL --- */}
+      {isEditModalOpen && patient && (
+        <PatientEditModal
+          patient={patient}
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          onSave={(updated) => setPatient(updated)}
+        />
+      )}
+
+      {/* --- QUICK DOCUMENT MODAL --- */}
       <QuickDocumentModal
         isOpen={showDocModal}
         onClose={() => setShowDocModal(false)}
@@ -338,7 +355,17 @@ export default function AnamnesisSession() {
             </div>
           </div>
 
-          <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+          <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
+            {/* Toggle Patient Sidebar Button */}
+            <button
+              onClick={() => setShowPatientSidebar(!showPatientSidebar)}
+              className="flex items-center gap-2 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-lg text-xs font-bold transition-colors shadow-2xs"
+              title="Alternar Painel do Paciente"
+            >
+              <User size={16} className="text-indigo-600" />
+              <span>{showPatientSidebar ? 'Ocultar Perfil' : 'Ver Perfil do Paciente'}</span>
+            </button>
+
             <div className="flex items-center gap-2 text-xs font-medium">
               {status === 'saving' && <span className="text-blue-600 flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-full"><Clock size={12} className="animate-spin"/> Salvando...</span>}
               {status === 'saved' && <span className="text-emerald-600 flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-full"><CheckCircle size={12}/> Salvo {lastSaved?.toLocaleTimeString()}</span>}
@@ -363,11 +390,23 @@ export default function AnamnesisSession() {
           </div>
         </div>
 
-        {/* Editor Content - 1 Column Layout */}
-        <div className="flex-1 w-full max-w-4xl mx-auto p-4 md:p-8 space-y-8 pb-20">
+        {/* Main Workspace Layout (Sidebar + Expanded Fields) */}
+        <div className="flex-1 w-full max-w-[1600px] mx-auto p-4 md:p-6 flex flex-col lg:flex-row items-start gap-6 pb-20">
           
-          {/* Subjective */}
-          <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in-up">
+          {/* Patient Profile Retractable Sidebar (~40% width) */}
+          <PatientProfileSidebar
+            patient={patient}
+            isOpen={showPatientSidebar}
+            onToggle={() => setShowPatientSidebar(false)}
+            onPatientUpdate={(updated) => setPatient(updated)}
+            onOpenEditModal={() => setIsEditModalOpen(true)}
+          />
+
+          {/* Main Anamnesis Form (Expanded Width) */}
+          <div className="flex-1 min-w-0 w-full space-y-6">
+            
+            {/* Subjective */}
+            <section className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in-up">
              <div className="bg-indigo-50 px-6 py-4 border-b border-indigo-100 flex items-center gap-3">
                 <div className="p-2 bg-indigo-100 text-indigo-700 rounded-lg">
                   <FileText size={20} />
@@ -537,6 +576,7 @@ export default function AnamnesisSession() {
              </div>
           </section>
 
+          </div>
         </div>
       </div>
     </>

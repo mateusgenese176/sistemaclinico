@@ -612,6 +612,88 @@ export default function PatientProfile() {
                 <h3 className="font-semibold text-slate-800 mb-2">Informações Sociais</h3>
                 <p className="text-sm text-slate-600 leading-relaxed italic">{patient.social_info || 'Não informado.'}</p>
               </div>
+
+              {/* Histórico Médico Card */}
+              {(() => {
+                const medHistory = patient.medical_history || (() => {
+                  try {
+                    const saved = localStorage.getItem(`medical_history_${patient.id}`);
+                    if (saved) return JSON.parse(saved);
+                  } catch (e) {}
+                  return null;
+                })();
+
+                return (
+                  <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+                    <h3 className="font-semibold text-slate-800 border-b border-slate-100 pb-2 flex items-center justify-between">
+                      <span>Histórico Médico</span>
+                      <button 
+                        onClick={() => navigate(`/anamnesis/session/${patient.id}`)}
+                        className="text-xs text-blue-600 hover:underline font-normal"
+                      >
+                        Editar na Anamnese
+                      </button>
+                    </h3>
+                    
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <span className="font-bold text-red-700 block mb-1">Alergias:</span>
+                        {medHistory?.allergies?.length ? (
+                          <div className="flex flex-wrap gap-1">
+                            {medHistory.allergies.map((a: string) => (
+                              <span key={a} className="bg-red-50 text-red-700 px-2 py-0.5 rounded font-medium border border-red-100">{a}</span>
+                            ))}
+                          </div>
+                        ) : <span className="text-slate-400 italic">Nenhuma registrada</span>}
+                      </div>
+
+                      <div>
+                        <span className="font-bold text-amber-700 block mb-1">Comorbidades:</span>
+                        {medHistory?.comorbidities?.length ? (
+                          <div className="flex flex-wrap gap-1">
+                            {medHistory.comorbidities.map((c: string) => (
+                              <span key={c} className="bg-amber-50 text-amber-800 px-2 py-0.5 rounded font-medium border border-amber-100">{c}</span>
+                            ))}
+                          </div>
+                        ) : <span className="text-slate-400 italic">Nenhuma registrada</span>}
+                      </div>
+
+                      <div>
+                        <span className="font-bold text-indigo-700 block mb-1">Medicamentos Contínuos:</span>
+                        {medHistory?.continuous_medications?.length ? (
+                          <div className="flex flex-wrap gap-1">
+                            {medHistory.continuous_medications.map((m: string) => (
+                              <span key={m} className="bg-indigo-50 text-indigo-800 px-2 py-0.5 rounded font-medium border border-indigo-100">{m}</span>
+                            ))}
+                          </div>
+                        ) : <span className="text-slate-400 italic">Nenhum registrado</span>}
+                      </div>
+
+                      <div>
+                        <span className="font-bold text-emerald-700 block mb-1">Cirurgias:</span>
+                        {medHistory?.surgeries?.length ? (
+                          <div className="flex flex-wrap gap-1">
+                            {medHistory.surgeries.map((s: string) => (
+                              <span key={s} className="bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded font-medium border border-emerald-100">{s}</span>
+                            ))}
+                          </div>
+                        ) : <span className="text-slate-400 italic">Nenhuma registrada</span>}
+                      </div>
+
+                      <div>
+                        <span className="font-bold text-purple-700 block mb-1">Internações:</span>
+                        {medHistory?.hospitalizations?.length ? (
+                          <div className="flex flex-wrap gap-1">
+                            {medHistory.hospitalizations.map((h: string) => (
+                              <span key={h} className="bg-purple-50 text-purple-800 px-2 py-0.5 rounded font-medium border border-purple-100">{h}</span>
+                            ))}
+                          </div>
+                        ) : <span className="text-slate-400 italic">Nenhuma registrada</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
           </div>
 
           {/* Right Column */}

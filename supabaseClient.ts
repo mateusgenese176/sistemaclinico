@@ -46,6 +46,9 @@ begin
   if not exists (select 1 from information_schema.columns where table_name='patients' and column_name='insurance_plan') then 
     alter table patients add column insurance_plan text; 
   end if;
+  if not exists (select 1 from information_schema.columns where table_name='patients' and column_name='medical_history') then 
+    alter table patients add column medical_history jsonb default '{}'::jsonb; 
+  end if;
   if not exists (select 1 from information_schema.columns where table_name='anamneses' and column_name='status') then 
     alter table anamneses add column status text default 'final'; 
   end if;
