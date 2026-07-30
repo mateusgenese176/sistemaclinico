@@ -250,13 +250,13 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">Texto de rotina</label>
-                <div className="border border-slate-200 rounded-lg overflow-hidden h-[300px]">
+                <div className="border border-slate-200 rounded-lg overflow-hidden flex flex-col max-h-[300px]">
                   <RichTextEditor 
                     value={routineForm.content}
                     onChange={v => setRoutineForm({...routineForm, content: v})}
                     fieldId="routine_editor"
                     colorTheme="blue"
-                    className="h-full border-none rounded-none"
+                    className="border-none rounded-none overflow-hidden"
                   />
                 </div>
               </div>
@@ -342,7 +342,7 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
       )}
 
       {/* Toolbar */}
-      <div className="flex items-center gap-1 p-2 border-b border-slate-100 bg-slate-50/50 flex-wrap sticky top-0 z-10">
+      <div className="flex items-center gap-1 p-2 border-b border-slate-100 bg-slate-50 shrink-0 sticky top-0 z-10 shadow-sm">
         <button onClick={() => execCommand('bold')} className={buttonClass} title="Negrito">
           <Bold size={16} />
         </button>
@@ -378,7 +378,7 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
         contentEditable
         onInput={handleInput}
         onKeyDown={handleKeyDown}
-        className={`p-6 outline-none text-slate-700 text-sm leading-relaxed prose prose-sm max-w-none flex-1 overflow-y-auto ${fieldId === 'routine_editor' ? 'min-h-[250px]' : 'min-h-[160px]'}`}
+        className={`p-6 outline-none text-slate-700 text-sm leading-relaxed prose prose-sm max-w-none flex-1 min-h-0 overflow-y-auto ${fieldId === 'routine_editor' ? 'min-h-[180px] max-h-[260px]' : 'min-h-[160px] max-h-[380px]'}`}
         style={{ whiteSpace: 'pre-wrap' }}
       />
       

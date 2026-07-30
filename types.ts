@@ -86,10 +86,13 @@ export interface MedicalDocument {
   id: string;
   patient_id: string;
   doctor_id: string;
-  type: 'prescription' | 'referral'; // Receituário ou Encaminhamento
+  type: 'prescription' | 'referral' | 'exam'; // Receituário, Encaminhamento ou Solicitação de Exame
   content: {
     items?: PrescriptionItem[]; // Para receituário
     text?: string; // Para encaminhamento (HTML Rich Text)
+    examCategory?: 'laboratorial' | 'imagem'; // Para exames
+    selectedExams?: string[]; // Lista de exames selecionados
+    customExams?: string; // Outros exames digitados manualmente
   }; 
   created_at: string;
   doctor?: User;

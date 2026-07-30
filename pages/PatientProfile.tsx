@@ -7,6 +7,8 @@ import { Printer, Activity, Tag, Camera, ArrowLeft, FileText, PlusCircle, Pencil
 import { useDialog } from '../components/Dialog';
 import RichTextEditor from '../components/RichTextEditor';
 import PatientEditModal from '../components/PatientEditModal';
+import QuickDocumentModal from '../components/QuickDocumentModal';
+import { printMedicalDocument, HEADER_LOGO_URL } from '../utils/printDocument';
 
 export default function PatientProfile() {
   const { id } = useParams();
@@ -26,7 +28,8 @@ export default function PatientProfile() {
 
   // Document Modal State
   const [showDocModal, setShowDocModal] = useState(false);
-  const [docType, setDocType] = useState<'prescription' | 'referral'>('prescription');
+  const [initialDocType, setInitialDocType] = useState<'prescription' | 'referral' | 'exam'>('prescription');
+  const [selectedDocForCopy, setSelectedDocForCopy] = useState<MedicalDocument | null>(null);
   
   // Prescription State
   const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItem[]>([{ medication: '', quantity: '', dosage: '', usageMode: 'Uso Oral' }]);
@@ -223,12 +226,8 @@ export default function PatientProfile() {
   };
 
   const handleCopyDocument = (doc: MedicalDocument) => {
-    setDocType(doc.type as 'prescription' | 'referral');
-    if (doc.type === 'prescription') {
-      setPrescriptionItems([...(doc.content.items || [{ medication: '', quantity: '', dosage: '', usageMode: 'Uso Oral' }])]);
-    } else {
-      setReferralText(doc.content.text || '');
-    }
+    setSelectedDocForCopy(doc);
+    setInitialDocType(doc.type);
     setShowDocModal(true);
   };
 
@@ -363,206 +362,11 @@ export default function PatientProfile() {
     const diff = Date.now() - new Date(dob).getTime();
     const ageDate = new Date(diff);
     return Math.abs(ageDate.getUTCFullYear() - 1970) + ' anos';
-  }
-
-  const handlePrintDocument = (doc: MedicalDocument, preview = false) => {
-    if (!patient || !user) return;
-    const printWindow = window.open('', '_blank', 'width=900,height=800');
-    if (!printWindow) return;
-
-    const docDate = new Date(doc.created_at).toLocaleDateString();
-    
-    // Construct Prescription HTML
-    let contentHtml = '';
-    
-    if (doc.type === 'prescription' && doc.content.items) {
-      // Group by Usage Mode
-      const groupedItems: Record<string, PrescriptionItem[]> = {};
-      
-      doc.content.items.forEach(item => {
-        const mode = item.usageMode || 'Uso Geral';
-        if (!groupedItems[mode]) {
-          groupedItems[mode] = [];
-        }
-        groupedItems[mode].push(item);
-      });
-
-      // Generate HTML for groups
-      contentHtml = Object.entries(groupedItems).map(([mode, items]) => `
-        <div style="margin-bottom: 25px; page-break-inside: avoid;">
-          <div style="text-align: center; font-weight: bold; text-transform: uppercase; margin-bottom: 15px; font-size: 14px; text-decoration: underline; color: #1e3a8a;">
-             ${mode}
-          </div>
-          <div class="space-y-4">
-             ${items.map(item => `
-                <div class="mb-6">
-                   <div class="flex items-end text-lg font-bold uppercase text-slate-900">
-                      <span style="flex-shrink: 0; padding-right: 5px;">${item.medication}</span>
-                      <span style="flex-grow: 1; border-bottom: 2px dotted #94a3b8; margin: 0 5px; position: relative; top: -5px;"></span>
-                      <span style="flex-shrink: 0; padding-left: 5px;">${item.quantity}</span>
-                   </div>
-                   <div class="text-sm pl-0 mt-2 text-slate-700 font-medium" style="line-height: 1.4;">${item.dosage}</div>
-                </div>
-             `).join('')}
-          </div>
-        </div>
-      `).join('');
-
-    } else if (doc.type === 'referral') {
-       // Rich Text is already HTML
-       contentHtml = `<div class="prose max-w-none text-justify leading-relaxed whitespace-pre-wrap text-base font-medium text-slate-800">${doc.content.text}</div>`;
-    }
-
-    const html = `
-      <!DOCTYPE html>
-      <html lang="pt-BR">
-      <head>
-        <meta charset="UTF-8">
-        <title>${doc.type === 'prescription' ? 'Receituário' : 'Encaminhamento'} - ${patient.name}</title>
-        <script src="https://cdn.tailwindcss.com"></script>
-        <style>
-           @page { 
-             size: A4; 
-             margin: 0;
-           }
-           body { 
-             margin: 0; 
-             padding: 0; 
-             font-family: 'Inter', sans-serif; 
-             -webkit-print-color-adjust: exact; 
-             background: white; 
-           }
-           
-           /* Fixed Elements (Repeat on every page) */
-           .watermark {
-             position: fixed;
-             top: 50%; left: 50%;
-             transform: translate(-50%, -50%);
-             width: 60%;
-             opacity: 0.10; 
-             z-index: 0;
-             pointer-events: none;
-           }
-           .header-fixed {
-             position: fixed;
-             top: 0; left: 0; right: 0;
-             height: 3.5cm;
-             background: white;
-             z-index: 10;
-             padding: 1cm 2cm 0 2cm;
-             display: flex;
-             align-items: center;
-             gap: 1.5rem;
-           }
-           .footer-fixed {
-             position: fixed;
-             bottom: 0; left: 0; right: 0;
-             height: 2.5cm;
-             background: white;
-             z-index: 10;
-             text-align: center;
-             font-size: 10px;
-             color: #1e3a8a; /* Blue-900 */
-             font-weight: bold;
-             padding: 0.5cm 2cm 1cm 2cm;
-             display: flex;
-             flex-direction: column;
-             justify-content: flex-end;
-           }
-
-           /* Content Flow */
-           .content-wrap {
-             /* Reserve space for Header and Footer to prevent overlap */
-             padding-top: 4cm; 
-             padding-bottom: 3cm; 
-             padding-left: 2cm;
-             padding-right: 2cm;
-             position: relative;
-             z-index: 5;
-             display: flex;
-             flex-direction: column;
-             min-height: 25cm; /* Ensure it takes up roughly full page minus margins to push signature down */
-           }
-           
-           .signature-box {
-              margin-top: auto; /* This pushes the signature to the bottom of the flex container */
-              padding-top: 2cm; /* Ensure separation from text */
-              display: flex;
-              justify-content: center;
-              page-break-inside: avoid; /* Don't split signature */
-           }
-
-           /* Typography Tweaks */
-           h3 { margin-top: 0; }
-           .prose p { margin-bottom: 0.5em; }
-        </style>
-      </head>
-      <body>
-        <!-- Repeated Watermark -->
-        <img src="${HEADER_LOGO_URL}" class="watermark" />
-        
-        <!-- Repeated Header -->
-        <div class="header-fixed">
-           <img src="${HEADER_LOGO_URL}" class="h-20 w-auto object-contain" />
-           <div>
-              <h1 class="text-2xl font-bold text-slate-900 uppercase tracking-widest">${doc.type === 'prescription' ? 'Receituário' : 'Encaminhamento'}</h1>
-              <p class="text-sm text-slate-600">Paciente: <b class="text-slate-900 uppercase">${patient.name}</b></p>
-              <p class="text-sm text-slate-600">Idade: ${calculateAge(patient.dob)} • Data: ${docDate}</p>
-           </div>
-        </div>
-
-        <!-- Repeated Footer -->
-        <div class="footer-fixed">
-           <p>Av. José Veríssimo, 752 - Maurício de Nassau</p>
-           <p>Fones: (81) 3727-7250 | 9 9642-0590 (Recepção) | 9 9102-5771 (Autorização) | 9 7328-0845 (Financeiro)</p>
-           <p>CEP 55.014-250 - Caruaru - PE</p>
-        </div>
-
-        <!-- Flowing Content -->
-        <div class="content-wrap">
-           <div>
-             ${contentHtml}
-           </div>
-
-           <!-- Signature Block (Flows with text, avoids break, always at end of content) -->
-           <div class="signature-box">
-              <div class="text-center border-t border-slate-800 pt-2 px-12 min-w-[300px]">
-                 <p class="font-bold text-slate-900">Dr. ${user.name}</p>
-                 <p class="text-sm text-slate-600">CRM: ${user.crm || ''}</p>
-              </div>
-           </div>
-        </div>
-        
-        <script>
-           ${!preview ? 'window.onload = () => window.print();' : ''}
-        </script>
-      </body>
-      </html>
-    `;
-    printWindow.document.write(html);
-    printWindow.document.close();
   };
 
-  const handleSaveDocument = async () => {
+  const handlePrintDocument = (doc: MedicalDocument) => {
     if (!patient || !user) return;
-    
-    try {
-      const payload = {
-         patient_id: patient.id,
-         doctor_id: user.id,
-         type: docType,
-         content: docType === 'prescription' ? { items: prescriptionItems } : { text: referralText }
-      };
-      
-      const { data, error } = await api.createDocument(payload);
-      if (error) throw error;
-      
-      await dialog.alert("Sucesso", "Documento salvo com sucesso.");
-      setShowDocModal(false);
-      fetchHistory();
-    } catch (e) {
-      dialog.alert("Erro", "Falha ao salvar documento.");
-    }
+    printMedicalDocument(doc, patient, user);
   };
 
   if (!patient) return <div>Carregando...</div>;
@@ -571,142 +375,18 @@ export default function PatientProfile() {
 
   return (
     <>
-      {/* --- DOCUMENT MODAL --- */}
-      {showDocModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-scale-in">
-              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
-                 <h3 className="font-bold text-slate-800">Novo Documento</h3>
-                 <button onClick={() => setShowDocModal(false)}><X size={20} className="text-slate-400 hover:text-red-500"/></button>
-              </div>
-              <div className="p-6 flex-1 overflow-y-auto">
-                 <div className="flex gap-4 mb-6">
-                    <button 
-                      onClick={() => setDocType('prescription')}
-                      className={`flex-1 py-3 rounded-lg border-2 font-bold transition-all ${docType === 'prescription' ? 'border-blue-900 bg-blue-50 text-blue-900' : 'border-slate-100 text-slate-400'}`}
-                    >
-                       Receituário Simples
-                    </button>
-                    <button 
-                      onClick={() => setDocType('referral')}
-                      className={`flex-1 py-3 rounded-lg border-2 font-bold transition-all ${docType === 'referral' ? 'border-blue-900 bg-blue-50 text-blue-900' : 'border-slate-100 text-slate-400'}`}
-                    >
-                       Encaminhamento
-                    </button>
-                 </div>
-
-                 {docType === 'prescription' ? (
-                   <div className="space-y-6">
-                      {prescriptionItems.map((item, idx) => (
-                        <div key={idx} className="flex flex-col md:flex-row gap-2 items-start bg-slate-50 p-4 rounded-xl border border-slate-200 group shadow-sm">
-                           <div className="flex-1 grid grid-cols-1 md:grid-cols-6 gap-3 w-full">
-                              
-                              <div className="md:col-span-2">
-                                <label className="block text-xs font-bold text-slate-500 mb-1">Via de Uso</label>
-                                <div className="relative">
-                                    <select 
-                                        className="w-full p-2.5 text-sm border border-slate-300 rounded-lg appearance-none bg-white focus:ring-2 focus:ring-blue-900 outline-none"
-                                        value={USAGE_MODES.includes(item.usageMode || '') ? item.usageMode : 'Outro'}
-                                        onChange={e => {
-                                            const newItems = [...prescriptionItems];
-                                            if (e.target.value === 'Outro') {
-                                                newItems[idx].usageMode = ''; // Clear so input shows
-                                            } else {
-                                                newItems[idx].usageMode = e.target.value;
-                                            }
-                                            setPrescriptionItems(newItems);
-                                        }}
-                                    >
-                                        {USAGE_MODES.map(mode => <option key={mode} value={mode}>{mode}</option>)}
-                                    </select>
-                                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"/>
-                                </div>
-                                {/* If Custom/Empty, show input */}
-                                {(!item.usageMode || !USAGE_MODES.includes(item.usageMode)) && (
-                                    <input 
-                                        placeholder="Digite a via (ex: Uso Inalatório)" 
-                                        className="w-full mt-2 p-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none"
-                                        value={item.usageMode}
-                                        onChange={e => {
-                                            const newItems = [...prescriptionItems];
-                                            newItems[idx].usageMode = e.target.value;
-                                            setPrescriptionItems(newItems);
-                                        }}
-                                    />
-                                )}
-                              </div>
-
-                              <div className="md:col-span-3">
-                                 <label className="block text-xs font-bold text-slate-500 mb-1">Medicação</label>
-                                 <input 
-                                    placeholder="Nome da Medicação (ex: Dipirona 500mg)" 
-                                    className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none" 
-                                    value={item.medication} 
-                                    onChange={e => {
-                                        const newItems = [...prescriptionItems];
-                                        newItems[idx].medication = e.target.value;
-                                        setPrescriptionItems(newItems);
-                                    }} 
-                                 />
-                              </div>
-                              
-                              <div className="md:col-span-1">
-                                 <label className="block text-xs font-bold text-slate-500 mb-1">Qtd</label>
-                                 <input 
-                                    placeholder="Ex: 1 CX" 
-                                    className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none" 
-                                    value={item.quantity} 
-                                    onChange={e => {
-                                        const newItems = [...prescriptionItems];
-                                        newItems[idx].quantity = e.target.value;
-                                        setPrescriptionItems(newItems);
-                                    }} 
-                                 />
-                              </div>
-                              
-                              <div className="md:col-span-6">
-                                 <label className="block text-xs font-bold text-slate-500 mb-1">Posologia / Modo de Uso</label>
-                                 <textarea 
-                                    rows={2}
-                                    placeholder="Ex: Tomar 1cp a cada 6h se houver dor ou febre." 
-                                    className="w-full p-2.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-900 outline-none resize-none" 
-                                    value={item.dosage} 
-                                    onChange={e => {
-                                        const newItems = [...prescriptionItems];
-                                        newItems[idx].dosage = e.target.value;
-                                        setPrescriptionItems(newItems);
-                                    }} 
-                                 />
-                              </div>
-                           </div>
-                           <button onClick={() => setPrescriptionItems(prev => prev.filter((_, i) => i !== idx))} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors mt-6"><Trash2 size={18}/></button>
-                        </div>
-                      ))}
-                      
-                      <button onClick={() => setPrescriptionItems([...prescriptionItems, {medication: '', quantity: '', dosage: '', usageMode: 'Uso Oral'}])} className="w-full py-3 border-2 border-dashed border-blue-200 rounded-xl text-blue-600 font-bold hover:bg-blue-50 transition-colors flex items-center justify-center gap-2">
-                         <PlusCircle size={18}/> Adicionar Item à Receita
-                      </button>
-                   </div>
-                 ) : (
-                   <div className="h-[400px]">
-                      <RichTextEditor 
-                        value={referralText}
-                        onChange={setReferralText}
-                        placeholder="Descreva o encaminhamento, motivo, especialidade e observações clínicas..."
-                        fieldId="referral"
-                        colorTheme="blue"
-                      />
-                   </div>
-                 )}
-              </div>
-              <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 rounded-b-2xl">
-                 <button onClick={() => setShowDocModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">Cancelar</button>
-                 <button onClick={handleSaveDocument} className="px-6 py-2 bg-blue-900 text-white rounded-lg hover:bg-blue-800 shadow-lg shadow-blue-900/20 font-medium flex items-center gap-2">
-                    <Printer size={18} /> Salvar e Imprimir
-                 </button>
-              </div>
-           </div>
-        </div>
+      {/* --- QUICK DOCUMENT MODAL --- */}
+      {showDocModal && user && patient && (
+        <QuickDocumentModal 
+          isOpen={showDocModal}
+          onClose={() => setShowDocModal(false)}
+          patientId={patient.id}
+          doctor={user}
+          initialType={initialDocType}
+          initialDoc={selectedDocForCopy}
+          onSaveSuccess={fetchHistory}
+          onPrintAfterSave={(doc) => handlePrintDocument(doc)}
+        />
       )}
 
       {/* --- VIEW DOCUMENT MODAL --- */}
@@ -714,7 +394,9 @@ export default function PatientProfile() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-scale-in">
               <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-2xl">
-                 <h3 className="font-bold text-slate-800">Visualizar {viewingDoc.type === 'prescription' ? 'Receita' : 'Encaminhamento'}</h3>
+                 <h3 className="font-bold text-slate-800">
+                    Visualizar {viewingDoc.type === 'prescription' ? 'Receita' : viewingDoc.type === 'referral' ? 'Encaminhamento' : 'Exames Solicitados'}
+                 </h3>
                  <button onClick={() => setViewingDoc(null)}><X size={20} className="text-slate-400 hover:text-red-500"/></button>
               </div>
               <div className="p-8 flex-1 overflow-y-auto">
@@ -731,11 +413,36 @@ export default function PatientProfile() {
                           </div>
                        ))}
                     </div>
-                 ) : (
+                 ) : viewingDoc.type === 'referral' ? (
                     <div 
                        className="prose prose-sm max-w-none text-slate-700 leading-relaxed"
-                       dangerouslySetInnerHTML={{ __html: viewingDoc.content.text }}
+                       dangerouslySetInnerHTML={{ __html: viewingDoc.content.text || '' }}
                     />
+                 ) : (
+                    <div className="space-y-4">
+                       <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                          <p className="text-xs font-bold text-slate-500 uppercase">Categoria</p>
+                          <p className="font-semibold text-slate-800">{viewingDoc.content.examCategory === 'image' ? 'Exames de Imagem' : 'Exames Laboratoriais'}</p>
+                       </div>
+                       
+                       <div>
+                          <p className="text-xs font-bold text-slate-500 uppercase mb-2">Exames Solicitados</p>
+                          <div className="flex flex-wrap gap-2">
+                             {[...(viewingDoc.content.selectedExams || []), ...(viewingDoc.content.customExams || [])].map((ex: string, i: number) => (
+                                <span key={i} className="bg-blue-50 text-blue-900 border border-blue-200 px-3 py-1.5 rounded-lg text-sm font-medium">
+                                   {ex}
+                                </span>
+                             ))}
+                          </div>
+                       </div>
+
+                       {viewingDoc.content.notes && (
+                          <div className="bg-amber-50/60 p-3 rounded-lg border border-amber-200 mt-4">
+                             <p className="text-xs font-bold text-amber-900 uppercase mb-1">Observações Clínicas / Indicação</p>
+                             <p className="text-sm text-slate-700 whitespace-pre-wrap">{viewingDoc.content.notes}</p>
+                          </div>
+                       )}
+                    </div>
                  )}
               </div>
               <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50 rounded-b-2xl">
@@ -1059,25 +766,49 @@ export default function PatientProfile() {
 
                     {activeTab === 'documents' && (
                        <div className="space-y-6">
-                          <button 
-                             onClick={() => {
-                                setShowDocModal(true);
-                                setPrescriptionItems([{ medication: '', quantity: '', dosage: '', usageMode: 'Uso Oral' }]);
-                                setReferralText('');
-                             }} 
-                             className="w-full py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:border-blue-900 hover:text-blue-900 transition-all font-bold flex items-center justify-center gap-2"
-                          >
-                             <FilePlus size={24} /> Novo Documento
-                          </button>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                             <button 
+                                onClick={() => {
+                                   setSelectedDocForCopy(null);
+                                   setInitialDocType('prescription');
+                                   setShowDocModal(true);
+                                }} 
+                                className="p-4 border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:bg-indigo-50 hover:border-indigo-400 rounded-xl text-indigo-900 transition-all font-bold flex items-center justify-center gap-2"
+                             >
+                                <FilePlus size={20} /> Nova Receita
+                             </button>
+                             <button 
+                                onClick={() => {
+                                   setSelectedDocForCopy(null);
+                                   setInitialDocType('referral');
+                                   setShowDocModal(true);
+                                }} 
+                                className="p-4 border-2 border-dashed border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50 hover:border-emerald-400 rounded-xl text-emerald-900 transition-all font-bold flex items-center justify-center gap-2"
+                             >
+                                <FilePlus size={20} /> Novo Encaminhamento
+                             </button>
+                             <button 
+                                onClick={() => {
+                                   setSelectedDocForCopy(null);
+                                   setInitialDocType('exam');
+                                   setShowDocModal(true);
+                                }} 
+                                className="p-4 border-2 border-dashed border-amber-200 bg-amber-50/50 hover:bg-amber-50 hover:border-amber-400 rounded-xl text-amber-900 transition-all font-bold flex items-center justify-center gap-2"
+                             >
+                                <FilePlus size={20} /> Novo Exame
+                             </button>
+                          </div>
 
                           {documents.map(doc => (
                              <div key={doc.id} className="border border-slate-200 rounded-xl p-5 hover:shadow-lg transition-all bg-white flex justify-between items-center group">
                                 <div className="flex items-center gap-4">
-                                   <div className={`p-3 rounded-lg ${doc.type === 'prescription' ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                                   <div className={`p-3 rounded-lg ${doc.type === 'prescription' ? 'bg-indigo-50 text-indigo-700' : doc.type === 'referral' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
                                       <ScrollText size={24} />
                                    </div>
                                    <div>
-                                      <p className="font-bold text-slate-800 text-lg capitalize">{doc.type === 'prescription' ? 'Receituário' : 'Encaminhamento'}</p>
+                                      <p className="font-bold text-slate-800 text-lg capitalize">
+                                         {doc.type === 'prescription' ? 'Receituário' : doc.type === 'referral' ? 'Encaminhamento' : 'Solicitação de Exames'}
+                                      </p>
                                       <p className="text-xs text-slate-500">Dr. {doc.doctor?.name} • {new Date(doc.created_at).toLocaleDateString()}</p>
                                    </div>
                                 </div>
@@ -1088,15 +819,13 @@ export default function PatientProfile() {
                                       title="Visualizar"
                                    >
                                       <Eye size={20} />
-                                    </button>
-                                    <button 
-                                       onClick={() => handleCopyDocument(doc)}
-                                       className="p-2 text-slate-400 hover:text-blue-900 hover:bg-blue-50 rounded transition-colors"
-                                       title="Copiar para novo"
-                                    >
-                                       <Copy size={20} />
-                                    </button>
-                                    <button style={{display:'none'}}>
+                                   </button>
+                                   <button 
+                                      onClick={() => handleCopyDocument(doc)}
+                                      className="p-2 text-slate-400 hover:text-blue-900 hover:bg-blue-50 rounded transition-colors"
+                                      title="Copiar para novo"
+                                   >
+                                      <Copy size={20} />
                                    </button>
                                    <button 
                                       onClick={() => handlePrintDocument(doc)}
