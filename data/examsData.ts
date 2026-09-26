@@ -234,3 +234,81 @@ export const IMAGE_EXAMS: string[] = [
 ];
 
 export const UNIQUE_IMAGE_EXAMS: string[] = Array.from(new Set(IMAGE_EXAMS.map(e => e.trim()))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+export const CUSTOM_EXAMS_STORAGE_KEY = 'clinica_custom_exams_catalog_v1';
+
+export interface CustomExamsCatalog {
+  laboratorial: string[];
+  imagem: string[];
+}
+
+export function getStoredCustomExams(): CustomExamsCatalog {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(CUSTOM_EXAMS_STORAGE_KEY) : null;
+    if (!raw) return { laboratorial: [], imagem: [] };
+    const parsed = JSON.parse(raw);
+    return {
+      laboratorial: Array.isArray(parsed?.laboratorial) ? parsed.laboratorial.map((s: any) => String(s).trim()).filter(Boolean) : [],
+      imagem: Array.isArray(parsed?.imagem) ? parsed.imagem.map((s: any) => String(s).trim()).filter(Boolean) : []
+    };
+  } catch (e) {
+    console.error('Erro ao recuperar exames personalizados do armazenamento:', e);
+    return { laboratorial: [], imagem: [] };
+  }
+}
+
+export function saveCustomExamsToStorage(
+  newExams: string[],
+  category: 'laboratorial' | 'imagem'
+): CustomExamsCatalog {
+  try {
+    const current = getStoredCustomExams();
+    const cleanList = newExams
+      .map(e => e.trim())
+      .filter(e => e.length > 0);
+
+    const baseList = category === 'laboratorial' ? UNIQUE_LAB_EXAMS : UNIQUE_IMAGE_EXAMS;
+    const baseSet = new Set(baseList.map(e => e.toLowerCase()));
+    const customSet = new Set(current[category].map(e => e.toLowerCase()));
+
+    const newlyAdded: string[] = [];
+    cleanList.forEach(exam => {
+      const lower = exam.toLowerCase();
+      // Don't duplicate if already in base catalog or already registered in custom catalog
+      if (!baseSet.has(lower) && !customSet.has(lower)) {
+        customSet.add(lower);
+        newlyAdded.push(exam);
+      }
+    });
+
+    if (newlyAdded.length > 0) {
+      current[category] = [...current[category], ...newlyAdded];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(CUSTOM_EXAMS_STORAGE_KEY, JSON.stringify(current));
+      }
+    }
+
+    return current;
+  } catch (e) {
+    console.error('Erro ao salvar exames personalizados:', e);
+    return getStoredCustomExams();
+  }
+}
+
+export function removeCustomExamFromStorage(
+  examName: string,
+  category: 'laboratorial' | 'imagem'
+): CustomExamsCatalog {
+  try {
+    const current = getStoredCustomExams();
+    const targetLower = examName.trim().toLowerCase();
+    current[category] = current[category].filter(e => e.trim().toLowerCase() !== targetLower);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CUSTOM_EXAMS_STORAGE_KEY, JSON.stringify(current));
+    }
+    return current;
+  } catch (e) {
+    console.error('Erro ao remover exame personalizado:', e);
+    return getStoredCustomExams();
+  }
+}

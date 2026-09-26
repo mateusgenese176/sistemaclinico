@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
-import { Patient, MedicalHistory, Address } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Patient, MedicalHistory, Address, Anamnesis } from '../types';
 import { api } from '../supabaseClient';
 import { 
   User, Phone, MapPin, Calendar, CreditCard, Activity, Tag, 
   ShieldAlert, HeartPulse, Pill, Syringe, Building2, Plus, Trash2, 
-  ChevronLeft, X, Save, FileText, Pencil, Check, AlertCircle 
+  ChevronLeft, X, Save, FileText, Pencil, Check, AlertCircle,
+  History, Clock, Eye, Printer, ChevronDown, Loader2
 } from 'lucide-react';
 import { useDialog } from './Dialog';
+import { printAnamnesisDocument } from '../utils/printDocument';
 
 interface PatientProfileSidebarProps {
   patient: Patient;
@@ -33,6 +35,42 @@ export default function PatientProfileSidebar({
   const [newHospitalization, setNewHospitalization] = useState('');
 
   const [savingField, setSavingField] = useState<string | null>(null);
+
+  // State for chronological anamneses history
+  const [anamneses, setAnamneses] = useState<Anamnesis[]>([]);
+  const [loadingAnamneses, setLoadingAnamneses] = useState(false);
+  const [isAnamnesesOpen, setIsAnamnesesOpen] = useState(false);
+  const [selectedAnamnesis, setSelectedAnamnesis] = useState<Anamnesis | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchPatientAnamneses = async () => {
+      if (!patient?.id) return;
+      setLoadingAnamneses(true);
+      try {
+        const { data, error } = await api.getAnamneses(patient.id);
+        if (!error && data && isMounted) {
+          setAnamneses((data as any) || []);
+        }
+      } catch (err) {
+        console.warn('Erro ao carregar histórico de anamneses:', err);
+      } finally {
+        if (isMounted) setLoadingAnamneses(false);
+      }
+    };
+
+    fetchPatientAnamneses();
+    return () => {
+      isMounted = false;
+    };
+  }, [patient?.id]);
+
+  const stripHtml = (html?: string) => {
+    if (!html) return '';
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || '';
+  };
 
   const localHistoryFallback = (() => {
     if (patient.medical_history && Object.keys(patient.medical_history).length > 0) {
@@ -119,7 +157,8 @@ export default function PatientProfileSidebar({
   if (!isOpen) return null;
 
   return (
-    <aside className="w-full lg:w-[380px] xl:w-[420px] bg-white border-r border-slate-200 flex flex-col shrink-0 h-full overflow-y-auto animate-fade-in transition-all">
+    <>
+      <aside className="w-full lg:w-[380px] xl:w-[420px] bg-white border-r border-slate-200 flex flex-col shrink-0 h-full overflow-y-auto animate-fade-in transition-all">
       {/* Sidebar Header */}
       <div className="p-4 bg-slate-900 text-white flex justify-between items-center sticky top-0 z-10 shadow-md">
         <div className="flex items-center gap-2">
@@ -188,6 +227,119 @@ export default function PatientProfileSidebar({
             <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">
               Histórico & Dados Médicos
             </h3>
+          </div>
+
+          {/* --- ANAMNESES ANTERIORES (LISTA CRONOLÓGICA) --- */}
+          <div className="bg-gradient-to-br from-blue-50/90 via-indigo-50/50 to-slate-50 border border-blue-200/90 rounded-xl overflow-hidden shadow-xs transition-all">
+            <button
+              type="button"
+              onClick={() => setIsAnamnesesOpen(!isAnamnesesOpen)}
+              className="w-full p-3 flex items-center justify-between text-left hover:bg-blue-100/60 transition-colors cursor-pointer group"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-blue-900 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <History size={16} />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                      Anamneses Anteriores
+                    </span>
+                    <span className="text-[10px] font-bold bg-blue-100 text-blue-900 px-2 py-0.5 rounded-full border border-blue-200">
+                      {loadingAnamneses ? '...' : anamneses.length}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                    {loadingAnamneses
+                      ? 'Carregando histórico...'
+                      : anamneses.length === 0
+                      ? 'Nenhuma anterior registrada'
+                      : `${anamneses.length} ${anamneses.length === 1 ? 'consulta anterior' : 'consultas anteriores'}`}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-blue-900 group-hover:text-blue-700 transition-colors shrink-0 ml-2">
+                <span className="text-[11px] font-semibold hidden sm:inline">
+                  {isAnamnesesOpen ? 'Ocultar' : 'Ver Lista'}
+                </span>
+                <ChevronDown
+                  size={16}
+                  className={`transition-transform duration-200 ${isAnamnesesOpen ? 'rotate-180 text-blue-900' : 'text-slate-400'}`}
+                />
+              </div>
+            </button>
+
+            {/* Lista Cronológica Expansível */}
+            {isAnamnesesOpen && (
+              <div className="border-t border-blue-200/70 p-2.5 space-y-2 bg-white/95 max-h-72 overflow-y-auto animate-fade-in">
+                {loadingAnamneses ? (
+                  <div className="p-4 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
+                    <Loader2 size={15} className="animate-spin text-blue-600" />
+                    <span>Carregando atendimentos...</span>
+                  </div>
+                ) : anamneses.length === 0 ? (
+                  <div className="p-4 text-center bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                    <p className="text-xs text-slate-500 font-medium">
+                      Nenhuma anamnese anterior encontrada para este paciente.
+                    </p>
+                  </div>
+                ) : (
+                  anamneses.map((item, index) => {
+                    const dateObj = new Date(item.created_at);
+                    const formattedDate = dateObj.toLocaleDateString('pt-BR');
+                    const formattedTime = dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                    const isDraft = item.status === 'draft';
+                    const previewText = stripHtml(item.soap?.s || item.soap?.a || item.soap?.o || item.soap?.p || '');
+
+                    return (
+                      <div
+                        key={item.id || index}
+                        onClick={() => setSelectedAnamnesis(item)}
+                        className="p-2.5 bg-white hover:bg-blue-50/80 border border-slate-200 hover:border-blue-300 rounded-xl transition-all cursor-pointer shadow-2xs group relative"
+                        title="Clique para abrir e ver os dados completos desta anamnese"
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <div className="flex items-center gap-1.5">
+                            <Clock size={12} className="text-blue-600 shrink-0" />
+                            <span className="text-xs font-bold text-slate-900">
+                              {formattedDate}
+                            </span>
+                            <span className="text-slate-400 text-[10px]">
+                              às {formattedTime}
+                            </span>
+                          </div>
+                          <span
+                            className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                              isDraft ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            {isDraft ? 'Rascunho' : 'Finalizada'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[11px] text-slate-600 mb-1.5">
+                          <span className="font-medium text-slate-700 truncate">
+                            Dr(a). {item.doctor?.name || 'Médico'}
+                          </span>
+                          <span className="text-blue-700 font-bold group-hover:text-blue-900 flex items-center gap-1 shrink-0 text-[11px]">
+                            <Eye size={12} /> Abrir
+                          </span>
+                        </div>
+
+                        {previewText ? (
+                          <p className="text-[11px] text-slate-500 line-clamp-2 italic bg-slate-50 p-1.5 rounded-lg border border-slate-100 leading-relaxed">
+                            "{previewText}"
+                          </p>
+                        ) : (
+                          <p className="text-[10px] text-slate-400 italic">Sem anotações no resumo.</p>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
 
           {/* 1. Alergias */}
@@ -577,5 +729,178 @@ export default function PatientProfileSidebar({
         </div>
       </div>
     </aside>
+
+    {/* --- POPUP INTERNO: DETALHES COMPLETOS DA ANAMNESE ANTERIOR --- */}
+    {selectedAnamnesis && (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden animate-scale-in border border-slate-200">
+          {/* Modal Header */}
+          <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-start bg-slate-50/90 gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-900 text-xs font-bold px-2 py-0.5 rounded-md uppercase">
+                  <History size={12} /> Histórico de Anamnese
+                </span>
+                <span
+                  className={`text-xs font-bold px-2 py-0.5 rounded-md uppercase ${
+                    selectedAnamnesis.status === 'draft'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-emerald-100 text-emerald-800'
+                  }`}
+                >
+                  {selectedAnamnesis.status === 'draft' ? 'Rascunho' : 'Finalizada'}
+                </span>
+                <span className="text-xs font-semibold text-slate-500">
+                  {new Date(selectedAnamnesis.created_at).toLocaleDateString('pt-BR')} às{' '}
+                  {new Date(selectedAnamnesis.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              <h3 className="font-bold text-slate-900 text-lg leading-tight truncate">
+                Consulta de {patient.name}
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Médico Responsável: Dr(a). {selectedAnamnesis.doctor?.name || 'Não identificado'}{' '}
+                {selectedAnamnesis.doctor?.crm ? `(CRM: ${selectedAnamnesis.doctor.crm})` : ''}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => printAnamnesisDocument(selectedAnamnesis, patient)}
+                className="p-2 hover:bg-white rounded-xl text-slate-600 hover:text-blue-900 transition-colors border border-slate-200 shadow-2xs flex items-center gap-1.5 text-xs font-semibold"
+                title="Imprimir Anamnese"
+              >
+                <Printer size={16} />
+                <span className="hidden sm:inline">Imprimir</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedAnamnesis(null)}
+                className="p-2 hover:bg-red-50 rounded-xl text-slate-400 hover:text-red-600 transition-colors border border-slate-200 shadow-2xs"
+                title="Fechar"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Modal Body - SOAP Sections */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 text-slate-800">
+            {/* S - Subjetivo */}
+            <div className="bg-slate-50 rounded-xl border border-indigo-100 overflow-hidden shadow-2xs">
+              <div className="bg-indigo-50/80 px-4 py-2.5 border-b border-indigo-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-indigo-600 text-white font-bold text-xs flex items-center justify-center">
+                    S
+                  </span>
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-indigo-950">
+                    Subjetivo (Queixa & Relato do Paciente)
+                  </h4>
+                </div>
+              </div>
+              <div className="p-4 text-sm leading-relaxed text-slate-700">
+                {selectedAnamnesis.soap?.s ? (
+                  <div
+                    className="prose prose-sm max-w-none text-slate-800"
+                    dangerouslySetInnerHTML={{ __html: selectedAnamnesis.soap.s }}
+                  />
+                ) : (
+                  <p className="text-slate-400 italic text-xs">Sem anotações registradas no campo subjetivo.</p>
+                )}
+              </div>
+            </div>
+
+            {/* O - Objetivo */}
+            <div className="bg-slate-50 rounded-xl border border-emerald-100 overflow-hidden shadow-2xs">
+              <div className="bg-emerald-50/80 px-4 py-2.5 border-b border-emerald-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-emerald-600 text-white font-bold text-xs flex items-center justify-center">
+                    O
+                  </span>
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-emerald-950">
+                    Objetivo (Exame Físico & Dados Vitais)
+                  </h4>
+                </div>
+              </div>
+              <div className="p-4 text-sm leading-relaxed text-slate-700">
+                {selectedAnamnesis.soap?.o ? (
+                  <div
+                    className="prose prose-sm max-w-none text-slate-800"
+                    dangerouslySetInnerHTML={{ __html: selectedAnamnesis.soap.o }}
+                  />
+                ) : (
+                  <p className="text-slate-400 italic text-xs">Sem anotações registradas no campo objetivo.</p>
+                )}
+              </div>
+            </div>
+
+            {/* A - Avaliação */}
+            <div className="bg-slate-50 rounded-xl border border-amber-100 overflow-hidden shadow-2xs">
+              <div className="bg-amber-50/80 px-4 py-2.5 border-b border-amber-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-amber-600 text-white font-bold text-xs flex items-center justify-center">
+                    A
+                  </span>
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-amber-950">
+                    Avaliação (Hipóteses Diagnósticas & Raciocínio Clínico)
+                  </h4>
+                </div>
+              </div>
+              <div className="p-4 text-sm leading-relaxed text-slate-700">
+                {selectedAnamnesis.soap?.a ? (
+                  <div
+                    className="prose prose-sm max-w-none text-slate-800"
+                    dangerouslySetInnerHTML={{ __html: selectedAnamnesis.soap.a }}
+                  />
+                ) : (
+                  <p className="text-slate-400 italic text-xs">Sem anotações registradas no campo avaliação.</p>
+                )}
+              </div>
+            </div>
+
+            {/* P - Plano */}
+            <div className="bg-slate-50 rounded-xl border border-purple-100 overflow-hidden shadow-2xs">
+              <div className="bg-purple-50/80 px-4 py-2.5 border-b border-purple-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-purple-600 text-white font-bold text-xs flex items-center justify-center">
+                    P
+                  </span>
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-purple-950">
+                    Plano (Conduta, Prescrições & Orientações)
+                  </h4>
+                </div>
+              </div>
+              <div className="p-4 text-sm leading-relaxed text-slate-700">
+                {selectedAnamnesis.soap?.p ? (
+                  <div
+                    className="prose prose-sm max-w-none text-slate-800"
+                    dangerouslySetInnerHTML={{ __html: selectedAnamnesis.soap.p }}
+                  />
+                ) : (
+                  <p className="text-slate-400 italic text-xs">Sem anotações registradas no campo plano.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+            <span className="text-xs text-slate-500">
+              Atendimento registrado em{' '}
+              {new Date(selectedAnamnesis.created_at).toLocaleDateString('pt-BR')}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedAnamnesis(null)}
+              className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-colors shadow-2xs cursor-pointer"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
   );
 }

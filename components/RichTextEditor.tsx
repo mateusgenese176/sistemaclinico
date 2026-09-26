@@ -1,7 +1,34 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bold, Italic, List, AlignLeft, AlignCenter, AlignRight, AlignJustify, FilePlus, ChevronDown, Plus, Search, Eye, Edit2, Trash2, X, Save, Command } from 'lucide-react';
+import { 
+  Bold, Italic, Underline, Baseline, Highlighter, List, AlignLeft, AlignCenter, AlignRight, AlignJustify, 
+  FilePlus, ChevronDown, Plus, Search, Eye, Edit2, Trash2, X, Save, Command, Check, RotateCcw 
+} from 'lucide-react';
 import { api } from '../supabaseClient';
 import { useAuth } from '../App';
+
+const TEXT_COLORS = [
+  { label: 'Padrão (Escuro)', color: '#0f172a' },
+  { label: 'Cinza', color: '#64748b' },
+  { label: 'Vermelho Clínico', color: '#dc2626' },
+  { label: 'Laranja Alerta', color: '#ea580c' },
+  { label: 'Âmbar Atenção', color: '#d97706' },
+  { label: 'Verde Normal', color: '#16a34a' },
+  { label: 'Azul Destaque', color: '#2563eb' },
+  { label: 'Roxo Diagnóstico', color: '#7c3aed' },
+  { label: 'Rosa', color: '#db2777' },
+  { label: 'Azul Petróleo', color: '#0891b2' },
+];
+
+const HIGHLIGHT_COLORS = [
+  { label: 'Amarelo Neón', color: '#fef08a' },
+  { label: 'Verde Suave', color: '#bbf7d0' },
+  { label: 'Azul Céu', color: '#bfdbfe' },
+  { label: 'Laranja Suave', color: '#fed7aa' },
+  { label: 'Rosa Suave', color: '#fbcfe8' },
+  { label: 'Lilás Suave', color: '#e9d5ff' },
+  { label: 'Cinza Suave', color: '#e2e8f0' },
+  { label: 'Pêssego', color: '#fecdd3' },
+];
 
 interface Routine {
   id: string;
@@ -51,6 +78,78 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
   const [routineForm, setRoutineForm] = useState({ name: '', shortcut: '', content: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const lastContextMenuClick = useRef<{ time: number } | null>(null);
+
+  // Text & Highlight Color State
+  const [currentTextColor, setCurrentTextColor] = useState('#0f172a');
+  const [currentHighlightColor, setCurrentHighlightColor] = useState('#fef08a');
+  const [showTextColorPicker, setShowTextColorPicker] = useState(false);
+  const [showHighlightPicker, setShowHighlightPicker] = useState(false);
+
+  const textColorContainerRef = useRef<HTMLDivElement>(null);
+  const highlightContainerRef = useRef<HTMLDivElement>(null);
+  const savedSelectionRange = useRef<Range | null>(null);
+
+  const saveSelection = () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+      savedSelectionRange.current = sel.getRangeAt(0).cloneRange();
+    }
+  };
+
+  const restoreSelection = () => {
+    if (savedSelectionRange.current) {
+      const sel = window.getSelection();
+      if (sel) {
+        sel.removeAllRanges();
+        sel.addRange(savedSelectionRange.current);
+      }
+    }
+  };
+
+  // Close floating color pickers when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (textColorContainerRef.current && !textColorContainerRef.current.contains(target)) {
+        setShowTextColorPicker(false);
+      }
+      if (highlightContainerRef.current && !highlightContainerRef.current.contains(target)) {
+        setShowHighlightPicker(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const applyTextColor = (color: string) => {
+    restoreSelection();
+    execCommand('foreColor', color);
+    setCurrentTextColor(color);
+    setShowTextColorPicker(false);
+  };
+
+  const applyHighlightColor = (color: string) => {
+    restoreSelection();
+    if (color === 'transparent' || !color) {
+      document.execCommand('hiliteColor', false, 'transparent');
+      document.execCommand('backColor', false, 'transparent');
+    } else {
+      if (!document.execCommand('hiliteColor', false, color)) {
+        document.execCommand('backColor', false, color);
+      }
+    }
+    if (editorRef.current) {
+      editorRef.current.focus();
+      const html = editorRef.current.innerHTML;
+      lastHtmlRef.current = html;
+      onChange(html);
+    }
+    setCurrentHighlightColor(color === 'transparent' ? '#fef08a' : color);
+    setShowHighlightPicker(false);
+  };
 
   useEffect(() => {
     fetchRoutines();
@@ -117,6 +216,11 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
 
     // Shortcuts: Ctrl + Key
     if (e.ctrlKey) {
+      if (e.key.toLowerCase() === 'u') {
+        e.preventDefault();
+        execCommand('underline');
+        return;
+      }
       const routine = routines.find(r => r.shortcut.toLowerCase() === e.key.toLowerCase());
       if (routine) {
         e.preventDefault();
@@ -342,14 +446,183 @@ const RichTextEditor = React.forwardRef<any, RichTextEditorProps>(({
       )}
 
       {/* Toolbar */}
-      <div className="flex items-center gap-1 p-2 border-b border-slate-100 bg-slate-50 shrink-0 sticky top-0 z-10 shadow-sm">
-        <button onClick={() => execCommand('bold')} className={buttonClass} title="Negrito">
+      <div className="flex items-center gap-1 p-2 border-b border-slate-100 bg-slate-50 shrink-0 sticky top-0 z-20 shadow-sm flex-wrap">
+        <button onClick={() => execCommand('bold')} className={buttonClass} title="Negrito (Ctrl+B)">
           <Bold size={16} />
         </button>
-        <button onClick={() => execCommand('italic')} className={buttonClass} title="Itálico">
+        <button onClick={() => execCommand('italic')} className={buttonClass} title="Itálico (Ctrl+I)">
           <Italic size={16} />
         </button>
+        <button onClick={() => execCommand('underline')} className={buttonClass} title="Sublinhado (Ctrl+U)">
+          <Underline size={16} />
+        </button>
         
+        <div className="w-px h-4 bg-slate-300 mx-1"></div>
+
+        {/* Sessão de Cores (Antes do Alinhamento de Parágrafo) */}
+        {/* 1. Cor do Texto com Color Picker Flutuante */}
+        <div ref={textColorContainerRef} className="relative">
+          <button
+            type="button"
+            onMouseDown={() => saveSelection()}
+            onClick={() => {
+              setShowTextColorPicker(!showTextColorPicker);
+              setShowHighlightPicker(false);
+            }}
+            className={`${buttonClass} ${showTextColorPicker ? 'bg-slate-200 text-slate-800' : ''} flex flex-col items-center justify-center`}
+            title="Cor do Texto"
+          >
+            <Baseline size={16} />
+            <span
+              className="w-3.5 h-0.5 rounded-full mt-0.5 shadow-2xs"
+              style={{ backgroundColor: currentTextColor }}
+            />
+          </button>
+
+          {showTextColorPicker && (
+            <div className="absolute top-full left-0 mt-1.5 z-40 bg-white rounded-xl shadow-xl border border-slate-200 p-3 w-56 animate-scale-in">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                  Cor do Texto
+                </span>
+                <button
+                  type="button"
+                  onMouseDown={() => saveSelection()}
+                  onClick={() => applyTextColor('#0f172a')}
+                  className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold hover:underline flex items-center gap-1"
+                  title="Restaurar cor padrão"
+                >
+                  <RotateCcw size={10} /> Padrão
+                </button>
+              </div>
+
+              {/* Grid de Cores Rápidas */}
+              <div className="grid grid-cols-5 gap-1.5 mb-2.5">
+                {TEXT_COLORS.map((item) => (
+                  <button
+                    key={item.color}
+                    type="button"
+                    onMouseDown={() => saveSelection()}
+                    onClick={() => applyTextColor(item.color)}
+                    className="w-7 h-7 rounded-lg border border-slate-200 hover:scale-110 transition-transform flex items-center justify-center shadow-2xs cursor-pointer"
+                    style={{ backgroundColor: item.color }}
+                    title={item.label}
+                  >
+                    {currentTextColor.toLowerCase() === item.color.toLowerCase() && (
+                      <Check
+                        size={12}
+                        className={
+                          item.color === '#0f172a' || item.color === '#dc2626' || item.color === '#2563eb' || item.color === '#7c3aed' || item.color === '#0891b2'
+                            ? 'text-white'
+                            : 'text-slate-900'
+                        }
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Color Picker Personalizado Flutuante */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-[11px] font-medium text-slate-600">Personalizada:</span>
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <div className="w-6 h-6 rounded-lg border border-slate-300 shadow-2xs overflow-hidden relative">
+                    <input
+                      type="color"
+                      value={currentTextColor}
+                      onMouseDown={() => saveSelection()}
+                      onChange={(e) => applyTextColor(e.target.value)}
+                      className="absolute -top-3 -left-3 w-12 h-12 cursor-pointer opacity-0"
+                    />
+                    <div className="w-full h-full" style={{ backgroundColor: currentTextColor }} />
+                  </div>
+                  <span className="text-[11px] font-mono font-medium text-slate-500 uppercase group-hover:text-blue-900 transition-colors">
+                    {currentTextColor}
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2. Marca-texto com Color Picker Flutuante */}
+        <div ref={highlightContainerRef} className="relative">
+          <button
+            type="button"
+            onMouseDown={() => saveSelection()}
+            onClick={() => {
+              setShowHighlightPicker(!showHighlightPicker);
+              setShowTextColorPicker(false);
+            }}
+            className={`${buttonClass} ${showHighlightPicker ? 'bg-slate-200 text-slate-800' : ''} flex flex-col items-center justify-center`}
+            title="Cor do Marca-texto"
+          >
+            <Highlighter size={16} />
+            <span
+              className="w-3.5 h-0.5 rounded-full mt-0.5 shadow-2xs"
+              style={{ backgroundColor: currentHighlightColor }}
+            />
+          </button>
+
+          {showHighlightPicker && (
+            <div className="absolute top-full left-0 mt-1.5 z-40 bg-white rounded-xl shadow-xl border border-slate-200 p-3 w-56 animate-scale-in">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                  Marca-texto
+                </span>
+                <button
+                  type="button"
+                  onMouseDown={() => saveSelection()}
+                  onClick={() => applyHighlightColor('transparent')}
+                  className="text-[10px] text-red-600 hover:text-red-800 font-semibold hover:underline flex items-center gap-1"
+                  title="Remover cor de destaque"
+                >
+                  <X size={10} /> Sem destaque
+                </button>
+              </div>
+
+              {/* Grid de Cores de Marca-texto */}
+              <div className="grid grid-cols-4 gap-1.5 mb-2.5">
+                {HIGHLIGHT_COLORS.map((item) => (
+                  <button
+                    key={item.color}
+                    type="button"
+                    onMouseDown={() => saveSelection()}
+                    onClick={() => applyHighlightColor(item.color)}
+                    className="w-8 h-7 rounded-lg border border-slate-200 hover:scale-110 transition-transform flex items-center justify-center shadow-2xs cursor-pointer"
+                    style={{ backgroundColor: item.color }}
+                    title={item.label}
+                  >
+                    {currentHighlightColor.toLowerCase() === item.color.toLowerCase() && (
+                      <Check size={12} className="text-slate-800" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Color Picker Personalizado Flutuante para Marca-texto */}
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-[11px] font-medium text-slate-600">Personalizada:</span>
+                <label className="flex items-center gap-2 cursor-pointer group">
+                  <div className="w-6 h-6 rounded-lg border border-slate-300 shadow-2xs overflow-hidden relative">
+                    <input
+                      type="color"
+                      value={currentHighlightColor}
+                      onMouseDown={() => saveSelection()}
+                      onChange={(e) => applyHighlightColor(e.target.value)}
+                      className="absolute -top-3 -left-3 w-12 h-12 cursor-pointer opacity-0"
+                    />
+                    <div className="w-full h-full" style={{ backgroundColor: currentHighlightColor }} />
+                  </div>
+                  <span className="text-[11px] font-mono font-medium text-slate-500 uppercase group-hover:text-blue-900 transition-colors">
+                    {currentHighlightColor}
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="w-px h-4 bg-slate-300 mx-1"></div>
         
         <button onClick={() => execCommand('justifyLeft')} className={buttonClass} title="Alinhar à Esquerda">

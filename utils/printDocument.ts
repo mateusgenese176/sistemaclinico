@@ -1,6 +1,126 @@
-import { MedicalDocument, Patient, User, PrescriptionItem } from '../types';
+import { MedicalDocument, Patient, User, PrescriptionItem, Anamnesis } from '../types';
 
 export const HEADER_LOGO_URL = "https://i.ibb.co/sJR9zQKt/upscalemedia-transformed-1.png";
+
+export function printAnamnesisDocument(anamnesis: Anamnesis, patient: Patient) {
+  const printWindow = window.open('', '_blank', 'width=900,height=800');
+  if (!printWindow) return;
+
+  const docDate = new Date(anamnesis.created_at || Date.now()).toLocaleDateString('pt-BR');
+  const docTime = new Date(anamnesis.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const doctorName = anamnesis.doctor?.name || 'Médico Responsável';
+  const doctorCrm = anamnesis.doctor?.crm ? `CRM: ${anamnesis.doctor.crm}` : '';
+
+  const calculateAge = (dob?: string) => {
+    if (!dob) return '';
+    const diff = Date.now() - new Date(dob).getTime();
+    const ageDate = new Date(diff);
+    return Math.abs(ageDate.getUTCFullYear() - 1970) + ' anos';
+  };
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+      <meta charset="UTF-8">
+      <title>Prontuário / Anamnese - ${patient.name}</title>
+      <script src="https://cdn.tailwindcss.com"></script>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+      <style>
+        body { font-family: 'Inter', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        @page { size: A4; margin: 1.5cm; }
+        .break-inside-avoid { page-break-inside: avoid; }
+      </style>
+    </head>
+    <body class="bg-white text-slate-900 p-8 max-w-4xl mx-auto">
+      <div class="border-b-2 border-slate-900 pb-6 mb-8 flex justify-between items-end">
+        <div>
+          <div class="flex items-center gap-3 mb-2">
+            <img src="${HEADER_LOGO_URL}" alt="Genesis" class="h-12 w-auto object-contain" />
+            <h1 class="text-3xl font-bold tracking-tight text-slate-900">GENESIS MEDICAL</h1>
+          </div>
+          <p class="text-xs text-slate-500 uppercase tracking-widest pl-1">Relatório de Atendimento Clínico (Anamnese)</p>
+        </div>
+        <div class="text-right">
+          <p class="text-sm font-medium text-slate-600">Data: <span class="font-bold text-slate-900">${docDate}</span></p>
+          <p class="text-sm font-medium text-slate-600">Hora: <span class="font-bold text-slate-900">${docTime}</span></p>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 p-6 rounded-xl border border-slate-200 mb-8 grid grid-cols-2 gap-y-4 gap-x-8 text-sm break-inside-avoid shadow-sm">
+        <div>
+          <span class="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Paciente</span>
+          <span class="text-lg font-bold text-slate-900 block">${patient.name}</span>
+        </div>
+        <div>
+          <span class="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">CPF</span>
+          <span class="text-base text-slate-800 font-mono">${patient.cpf || 'Não informado'}</span>
+        </div>
+        <div>
+          <span class="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Idade / Data Nasc.</span>
+          <span class="text-base text-slate-800">${calculateAge(patient.dob)} ${patient.dob ? `(${new Date(patient.dob).toLocaleDateString('pt-BR')})` : ''}</span>
+        </div>
+        <div>
+          <span class="block text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-wider">Médico Responsável</span>
+          <span class="text-base text-slate-800 font-medium">Dr(a). ${doctorName} ${doctorCrm}</span>
+        </div>
+      </div>
+
+      <div class="space-y-6">
+        <div class="break-inside-avoid">
+          <div class="flex items-center gap-2 border-b border-indigo-200 pb-2 mb-3">
+            <span class="bg-indigo-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">S</span> 
+            <h3 class="text-base font-bold text-indigo-900 uppercase">Subjetivo</h3>
+          </div>
+          <div class="text-sm leading-relaxed text-justify text-slate-700 pl-2">
+            ${anamnesis.soap?.s || '<p class="text-slate-400 italic">Sem anotações registradas.</p>'}
+          </div>
+        </div>
+
+        <div class="break-inside-avoid">
+          <div class="flex items-center gap-2 border-b border-emerald-200 pb-2 mb-3">
+            <span class="bg-emerald-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">O</span> 
+            <h3 class="text-base font-bold text-emerald-900 uppercase">Objetivo</h3>
+          </div>
+          <div class="text-sm leading-relaxed text-justify text-slate-700 pl-2">
+            ${anamnesis.soap?.o || '<p class="text-slate-400 italic">Sem anotações registradas.</p>'}
+          </div>
+        </div>
+
+        <div class="break-inside-avoid">
+          <div class="flex items-center gap-2 border-b border-amber-200 pb-2 mb-3">
+            <span class="bg-amber-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">A</span> 
+            <h3 class="text-base font-bold text-amber-900 uppercase">Avaliação</h3>
+          </div>
+          <div class="text-sm leading-relaxed text-justify text-slate-700 pl-2">
+            ${anamnesis.soap?.a || '<p class="text-slate-400 italic">Sem anotações registradas.</p>'}
+          </div>
+        </div>
+
+        <div class="break-inside-avoid">
+          <div class="flex items-center gap-2 border-b border-purple-200 pb-2 mb-3">
+            <span class="bg-purple-900 text-white w-6 h-6 flex items-center justify-center rounded text-xs font-bold">P</span> 
+            <h3 class="text-base font-bold text-purple-900 uppercase">Plano</h3>
+          </div>
+          <div class="text-sm leading-relaxed text-justify text-slate-700 pl-2">
+            ${anamnesis.soap?.p || '<p class="text-slate-400 italic">Sem anotações registradas.</p>'}
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-16 pt-8 border-t border-slate-300 text-center break-inside-avoid">
+        <div class="inline-block pt-1 px-12">
+          <p class="font-bold text-slate-900">Dr(a). ${doctorName}</p>
+          <p class="text-xs text-slate-500">${doctorCrm}</p>
+        </div>
+      </div>
+      <script>window.onload = () => window.print();</script>
+    </body>
+    </html>
+  `;
+  printWindow.document.write(html);
+  printWindow.document.close();
+}
 
 export function printMedicalDocument(doc: MedicalDocument, patient: Patient, doctor: User) {
   const printWindow = window.open('', '_blank', 'width=900,height=800');

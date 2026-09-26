@@ -1,7 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MedicalDocument, PrescriptionItem, User } from '../types';
 import { api } from '../supabaseClient';
-import { UNIQUE_LAB_EXAMS, UNIQUE_IMAGE_EXAMS } from '../data/examsData';
+import { 
+  UNIQUE_LAB_EXAMS, 
+  UNIQUE_IMAGE_EXAMS, 
+  getStoredCustomExams, 
+  saveCustomExamsToStorage, 
+  removeCustomExamFromStorage, 
+  CustomExamsCatalog 
+} from '../data/examsData';
 import { X, Plus, PlusCircle, Trash2, ChevronDown, Search, Check, Printer, FileText, Activity, ShieldAlert } from 'lucide-react';
 import { useDialog } from './Dialog';
 
@@ -50,10 +57,15 @@ export default function QuickDocumentModal({
   const [customExams, setCustomExams] = useState('');
   const [examSearch, setExamSearch] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [customCatalog, setCustomCatalog] = useState<CustomExamsCatalog>(() => getStoredCustomExams());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Initialize or Reset
   useEffect(() => {
+    if (isOpen) {
+      setCustomCatalog(getStoredCustomExams());
+    }
+
     if (initialDoc) {
       setDocType(initialDoc.type);
       if (initialDoc.type === 'prescription' || initialDoc.type === 'special_prescription') {
@@ -89,12 +101,22 @@ export default function QuickDocumentModal({
 
   if (!isOpen) return null;
 
-  // Filter exams based on search query
-  const availableExams = examCategory === 'laboratorial' ? UNIQUE_LAB_EXAMS : UNIQUE_IMAGE_EXAMS;
+  // Filter exams based on search query, integrating custom exams into the official catalog
+  const baseExams = examCategory === 'laboratorial' ? UNIQUE_LAB_EXAMS : UNIQUE_IMAGE_EXAMS;
+  const currentCategoryCustoms = customCatalog[examCategory] || [];
+  const availableExams = Array.from(new Set([...currentCategoryCustoms, ...baseExams]))
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
   const filteredExams = availableExams.filter(exam =>
     exam.toLowerCase().includes(examSearch.toLowerCase().trim()) &&
     !selectedExams.includes(exam)
   );
+
+  const isExamCustom = (examName: string) => {
+    return (customCatalog[examCategory] || []).some(
+      c => c.trim().toLowerCase() === examName.trim().toLowerCase()
+    );
+  };
 
   const handleAddExam = (examName: string) => {
     if (!selectedExams.includes(examName)) {
@@ -108,6 +130,19 @@ export default function QuickDocumentModal({
     setSelectedExams(prev => prev.filter(e => e !== examName));
   };
 
+  const handleDeleteCustomExam = async (examName: string) => {
+    const confirmed = await dialog.confirm(
+      "Excluir Exame",
+      `Tem certeza que deseja excluir o exame "${examName}" do buscador oficial?`,
+      "danger"
+    );
+    if (confirmed) {
+      const updated = removeCustomExamFromStorage(examName, examCategory);
+      setCustomCatalog(updated);
+      setSelectedExams(prev => prev.filter(e => e.trim().toLowerCase() !== examName.trim().toLowerCase()));
+    }
+  };
+
   const handleKeyDownSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -115,17 +150,20 @@ export default function QuickDocumentModal({
         // Select top matching option
         handleAddExam(filteredExams[0]);
       } else if (examSearch.trim().length > 0) {
-        // Add custom exam
-        if (!selectedExams.includes(examSearch.trim())) {
-          setSelectedExams(prev => [...prev, examSearch.trim()]);
+        // Add custom exam and integrate into the official catalog
+        const newExam = examSearch.trim();
+        if (!selectedExams.some(e => e.toLowerCase() === newExam.toLowerCase())) {
+          setSelectedExams(prev => [...prev, newExam]);
         }
+        const updated = saveCustomExamsToStorage([newExam], examCategory);
+        setCustomCatalog(updated);
         setExamSearch('');
         setShowDropdown(false);
       }
     }
   };
 
-  // Add custom exams split by comma
+  // Add custom exams split by comma and integrate into the official catalog
   const handleAddCustomCommas = () => {
     if (!customExams.trim()) return;
     const parts = customExams
@@ -133,28 +171,54 @@ export default function QuickDocumentModal({
       .map(p => p.trim())
       .filter(p => p.length > 0);
     
-    const newExams = [...selectedExams];
-    parts.forEach(part => {
-      if (!newExams.includes(part)) {
-        newExams.push(part);
-      }
+    if (parts.length === 0) return;
+
+    // Add to selected exams
+    setSelectedExams(prev => {
+      const next = [...prev];
+      parts.forEach(part => {
+        if (!next.some(existing => existing.toLowerCase() === part.toLowerCase())) {
+          next.push(part);
+        }
+      });
+      return next;
     });
-    setSelectedExams(newExams);
+
+    // Integrate into the official searchable catalog
+    const updated = saveCustomExamsToStorage(parts, examCategory);
+    setCustomCatalog(updated);
+
+    // Clear Outros textarea
     setCustomExams('');
   };
 
   const handleSave = async (shouldPrint: boolean = false) => {
     if (!patientId || !doctor) return;
 
-    if (docType === 'exam' && selectedExams.length === 0 && !customExams.trim()) {
+    let finalSelected = [...selectedExams];
+    if (docType === 'exam' && customExams.trim()) {
+      const parts = customExams
+        .split(',')
+        .map(p => p.trim())
+        .filter(p => p.length > 0);
+      if (parts.length > 0) {
+        parts.forEach(part => {
+          if (!finalSelected.some(existing => existing.toLowerCase() === part.toLowerCase())) {
+            finalSelected.push(part);
+          }
+        });
+        const updated = saveCustomExamsToStorage(parts, examCategory);
+        setCustomCatalog(updated);
+      }
+    }
+
+    if (docType === 'exam' && finalSelected.length === 0) {
       dialog.alert("Atenção", "Por favor, selecione ou digite ao menos um exame para solicitar.");
       return;
     }
 
     setLoading(true);
     try {
-      let finalCustom = customExams.trim();
-      
       const payload = {
         patient_id: patientId,
         doctor_id: doctor.id,
@@ -165,8 +229,8 @@ export default function QuickDocumentModal({
             ? { text: referralText }
             : { 
                 examCategory, 
-                selectedExams, 
-                customExams: finalCustom 
+                selectedExams: finalSelected, 
+                customExams: '' 
               }
       };
 
@@ -176,7 +240,7 @@ export default function QuickDocumentModal({
       onSaveSuccess();
       
       const createdDoc: MedicalDocument = {
-        id: data && data[0] ? data[0].id : Date.now().toString(),
+        id: (data as any)?.[0]?.id || Date.now().toString(),
         patient_id: patientId,
         doctor_id: doctor.id,
         type: docType,
@@ -464,27 +528,52 @@ export default function QuickDocumentModal({
                 {showDropdown && (
                   <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto divide-y divide-slate-100">
                     {filteredExams.length > 0 ? (
-                      filteredExams.map((exam, idx) => (
-                        <button
-                          key={exam}
-                          type="button"
-                          onClick={() => handleAddExam(exam)}
-                          className={`w-full text-left px-4 py-2.5 hover:bg-blue-50 text-xs font-semibold text-slate-700 flex justify-between items-center group transition-colors ${
-                            idx === 0 ? 'bg-blue-50/50 text-blue-900' : ''
-                          }`}
-                        >
-                          <span>{exam}</span>
-                          {idx === 0 && (
-                            <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded uppercase">
-                              Pressione Enter ↵
-                            </span>
-                          )}
-                        </button>
-                      ))
+                      filteredExams.map((exam, idx) => {
+                        const isCustom = isExamCustom(exam);
+                        return (
+                          <div
+                            key={exam}
+                            onClick={() => handleAddExam(exam)}
+                            className={`w-full text-left px-4 py-2.5 hover:bg-blue-50 text-xs font-semibold text-slate-700 flex justify-between items-center group transition-colors cursor-pointer select-none ${
+                              idx === 0 ? 'bg-blue-50/50 text-blue-900' : ''
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0 pr-2 flex-1">
+                              <span className="truncate">{exam}</span>
+                              {isCustom && (
+                                <span className="text-[10px] bg-blue-50 text-blue-800 border border-blue-200/80 px-1.5 py-0.5 rounded font-medium shrink-0">
+                                  Personalizado
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              {idx === 0 && (
+                                <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded uppercase">
+                                  Pressione Enter ↵
+                                </span>
+                              )}
+                              {isCustom && (
+                                <button
+                                  type="button"
+                                  title="Excluir este exame do buscador"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    handleDeleteCustomExam(exam);
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors group/del"
+                                >
+                                  <X size={14} className="stroke-[2.5]" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
                     ) : (
                       <div className="p-3 text-center text-xs text-slate-400">
                         {examSearch.trim() ? (
-                          <span>Exame não encontrado no banco. Pressione <b>Enter</b> para adicionar "<b>{examSearch}</b>".</span>
+                          <span>Exame não encontrado no banco. Pressione <b>Enter</b> para adicionar "<b>{examSearch}</b>" ao buscador.</span>
                         ) : (
                           <span>Digite o nome do exame para buscar...</span>
                         )}
@@ -540,14 +629,23 @@ export default function QuickDocumentModal({
 
               {/* "Outros" Section */}
               <div className="pt-2 border-t border-slate-100">
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
-                  Outros (Exames não listados - separe por vírgula)
-                </label>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-xs font-bold text-slate-600 uppercase">
+                    Outros (Exames não listados - separe por vírgula)
+                  </label>
+                  <span className="text-[10px] text-slate-400">Integrado automaticamente ao buscador</span>
+                </div>
                 <div className="flex gap-2">
                   <textarea
                     rows={2}
                     value={customExams}
                     onChange={e => setCustomExams(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleAddCustomCommas();
+                      }
+                    }}
                     placeholder="Ex: Vitamina B3, Exame genético específico, Exame de tolerância à lactose..."
                     className="flex-1 p-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none text-xs text-slate-800 resize-none"
                   />
@@ -555,11 +653,15 @@ export default function QuickDocumentModal({
                     type="button"
                     onClick={handleAddCustomCommas}
                     disabled={!customExams.trim()}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors disabled:opacity-50 self-end"
+                    className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white font-bold rounded-xl text-xs transition-colors disabled:opacity-50 disabled:bg-slate-200 disabled:text-slate-400 self-end flex items-center gap-1.5 shadow-sm"
                   >
-                    Adicionar como Tags
+                    <Plus size={14} />
+                    Adicionar Exames
                   </button>
                 </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Exames adicionados por este campo passam a constar no buscador oficial, com ícone de exclusão (<span className="text-slate-600 font-bold">X</span>) para retirada futura quando desejado.
+                </p>
               </div>
 
             </div>
