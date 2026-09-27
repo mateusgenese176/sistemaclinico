@@ -13,6 +13,48 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
       body { font-family: 'Inter', sans-serif; }
+
+      /* Patient profile photo radial action buttons emerging from center */
+      .photo-action-btn-1 {
+        opacity: 0;
+        transform: translate(67px, 53px) scale(0.15);
+        pointer-events: none;
+        transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 240ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+      }
+      .photo-action-btn-2 {
+        opacity: 0;
+        transform: translateY(83px) scale(0.15);
+        pointer-events: none;
+        transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 240ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+      }
+      .photo-action-btn-3 {
+        opacity: 0;
+        transform: translate(-67px, 53px) scale(0.15);
+        pointer-events: none;
+        transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 240ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+      }
+
+      .group\/photo:hover .photo-action-btn-1,
+      .group-photo-hover .photo-action-btn-1 {
+        opacity: 1;
+        transform: translate(0, 0) scale(1);
+        pointer-events: auto;
+        transition-delay: 0ms;
+      }
+      .group\/photo:hover .photo-action-btn-2,
+      .group-photo-hover .photo-action-btn-2 {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        pointer-events: auto;
+        transition-delay: 130ms;
+      }
+      .group\/photo:hover .photo-action-btn-3,
+      .group-photo-hover .photo-action-btn-3 {
+        opacity: 1;
+        transform: translate(0, 0) scale(1);
+        pointer-events: auto;
+        transition-delay: 260ms;
+      }
     </style>
   </head>
   <body class="bg-slate-50 text-slate-800 antialiased">

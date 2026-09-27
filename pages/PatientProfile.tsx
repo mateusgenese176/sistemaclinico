@@ -41,6 +41,7 @@ export default function PatientProfile() {
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [isPhotoHovered, setIsPhotoHovered] = useState(false);
 
   const [newTags, setNewTags] = useState('');
   const [anthropo, setAnthropo] = useState({ weight: '', height: '', bp_s: '', bp_d: '' });
@@ -148,6 +149,28 @@ export default function PatientProfile() {
         await api.updatePatient(id, { photo_url: base64 });
         setPatient(prev => prev ? ({ ...prev, photo_url: base64 }) : null);
      }
+  };
+
+  const handleDeletePhoto = async () => {
+    if (!id) return;
+    if (!patient?.photo_url) {
+      dialog.alert("Informação", "O paciente já está utilizando a imagem de perfil padrão.");
+      return;
+    }
+
+    const confirmed = await dialog.confirm(
+      "Remover Foto",
+      "Deseja remover a foto de perfil do paciente e restaurar a foto padrão?",
+      "danger"
+    );
+    if (!confirmed) return;
+
+    try {
+      await api.updatePatient(id, { photo_url: null });
+      setPatient(prev => prev ? ({ ...prev, photo_url: undefined }) : null);
+    } catch (e) {
+      dialog.alert("Erro", "Não foi possível remover a foto.");
+    }
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -519,23 +542,56 @@ export default function PatientProfile() {
                         </div>
                      </div>
                   ) : (
-                    <div className="w-32 h-32 mx-auto rounded-full bg-slate-100 border-4 border-slate-50 shadow-md overflow-hidden mb-4 relative">
+                    <div 
+                      className={`relative mx-auto w-32 h-32 mt-7 mb-4 group/photo select-none ${isPhotoHovered ? 'group-photo-hover' : ''}`}
+                      onMouseEnter={() => setIsPhotoHovered(true)}
+                      onMouseLeave={() => setIsPhotoHovered(false)}
+                    >
+                      {/* Invisible hover bridge across top arc */}
+                      <div className="absolute -top-12 -left-8 -right-8 h-16 pointer-events-auto" />
+
+                      {/* 1. Câmera - Mudar a foto com uma nova da câmera (Left, radial 145°) */}
+                      <button
+                        type="button"
+                        onClick={startCamera}
+                        title="Tirar nova foto com a câmera"
+                        style={{ left: '-20px', top: '-6px' }}
+                        className="photo-action-btn-1 absolute z-0 w-[34px] h-[34px] rounded-full bg-white hover:bg-blue-600 text-slate-600 hover:text-white border-2 border-white shadow-md hover:shadow-lg flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 transition-colors"
+                      >
+                        <Camera size={15} className="stroke-[2.2]" />
+                      </button>
+
+                      {/* 2. Upload - Mudar a foto com uma nova do dispositivo (Center, radial 90°) */}
+                      <label
+                        title="Enviar nova foto do dispositivo"
+                        style={{ left: '47px', top: '-36px' }}
+                        className="photo-action-btn-2 absolute z-0 w-[34px] h-[34px] rounded-full bg-white hover:bg-indigo-600 text-slate-600 hover:text-white border-2 border-white shadow-md hover:shadow-lg flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 transition-colors"
+                      >
+                        <Upload size={15} className="stroke-[2.2]" />
+                        <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
+                      </label>
+
+                      {/* 3. Lixeira - Apagar a foto original e deixar a default (Right, radial 35°) */}
+                      <button
+                        type="button"
+                        onClick={handleDeletePhoto}
+                        title="Apagar foto original e restaurar padrão"
+                        style={{ right: '-20px', top: '-6px' }}
+                        className="photo-action-btn-3 absolute z-0 w-[34px] h-[34px] rounded-full bg-white hover:bg-red-600 text-slate-600 hover:text-white border-2 border-white shadow-md hover:shadow-lg flex items-center justify-center cursor-pointer hover:scale-110 active:scale-95 transition-colors"
+                      >
+                        <Trash2 size={15} className="stroke-[2.2]" />
+                      </button>
+
+                      {/* Moldura circular da foto de perfil do paciente (Front, z-10) */}
+                      <div className="w-32 h-32 rounded-full bg-slate-100 border-4 border-slate-50 shadow-md overflow-hidden relative z-10">
                         {patient.photo_url ? (
-                        <img src={patient.photo_url} alt={patient.name} className="w-full h-full object-cover" />
+                          <img src={patient.photo_url} alt={patient.name} className="w-full h-full object-cover" />
                         ) : (
-                        <div className="flex items-center justify-center w-full h-full text-slate-300 text-4xl font-bold">{patient.name.charAt(0)}</div>
+                          <div className="flex items-center justify-center w-full h-full text-slate-300 text-4xl font-bold">
+                            {patient.name.charAt(0).toUpperCase()}
+                          </div>
                         )}
-                        
-                        {/* Hover Upload */}
-                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white text-xs font-medium flex-col gap-2">
-                           <button onClick={startCamera} className="hover:text-blue-200 flex flex-col items-center">
-                              <Camera size={20} className="mb-1" /> Camera
-                           </button>
-                           <label className="hover:text-blue-200 flex flex-col items-center cursor-pointer">
-                              <Upload size={20} className="mb-1" /> Upload
-                              <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
-                           </label>
-                        </div>
+                      </div>
                     </div>
                   )}
                   
