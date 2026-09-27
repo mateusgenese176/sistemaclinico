@@ -124,3 +124,13 @@ export interface Notification {
   read: boolean;
   created_at: string;
 }
+
+export interface ExamRoutine {
+  id: string;
+  user_id?: string;
+  name: string;
+  category: 'laboratorial' | 'imagem' | 'geral';
+  exams: string[];
+  description?: string;
+  created_at: string;
+}

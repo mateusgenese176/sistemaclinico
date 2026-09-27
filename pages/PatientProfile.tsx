@@ -941,7 +941,14 @@ export default function PatientProfile() {
                                  setInitialDocType('exam');
                                  setShowDocModal(true);
                               }} 
+                              onContextMenu={(e) => {
+                                 e.preventDefault();
+                                 setSelectedDocForCopy(null);
+                                 setInitialDocType('exam');
+                                 setShowDocModal(true);
+                              }}
                               className="p-3.5 border-2 border-dashed border-amber-200 bg-amber-50/50 hover:bg-amber-50 hover:border-amber-400 rounded-xl text-amber-900 transition-all font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5"
+                              title="Solicitar Exame (duplo clique direito para rotinas de exames)"
                            >
                               <FilePlus size={18} /> Solicitar Exame
                            </button>

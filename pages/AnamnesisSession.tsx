@@ -501,7 +501,14 @@ export default function AnamnesisSession() {
                    </button>
                    <button 
                      onClick={() => { setSelectedDocForCopy(null); setInitialDocType('exam'); setShowDocModal(true); }}
+                     onContextMenu={(e) => {
+                       e.preventDefault();
+                       setSelectedDocForCopy(null);
+                       setInitialDocType('exam');
+                       setShowDocModal(true);
+                     }}
                      className="text-xs bg-white border border-slate-300 hover:border-blue-500 hover:text-blue-600 px-3 py-2 rounded-lg font-medium transition-colors flex items-center gap-1 shadow-sm"
+                     title="Novo Exame (duplo clique direito para rotinas)"
                    >
                      <PlusCircle size={14} /> Novo Exame
                    </button>

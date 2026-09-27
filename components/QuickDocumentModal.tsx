@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MedicalDocument, PrescriptionItem, User } from '../types';
+import { MedicalDocument, PrescriptionItem, User, ExamRoutine } from '../types';
 import { api } from '../supabaseClient';
 import { 
   UNIQUE_LAB_EXAMS, 
@@ -7,9 +7,16 @@ import {
   getStoredCustomExams, 
   saveCustomExamsToStorage, 
   removeCustomExamFromStorage, 
-  CustomExamsCatalog 
+  CustomExamsCatalog,
+  getStoredExamRoutines,
+  saveExamRoutineToStorage,
+  deleteExamRoutineFromStorage
 } from '../data/examsData';
-import { X, Plus, PlusCircle, Trash2, ChevronDown, Search, Check, Printer, FileText, Activity, ShieldAlert } from 'lucide-react';
+import { 
+  X, Plus, PlusCircle, Trash2, ChevronDown, Search, Check, Printer, 
+  FileText, Activity, ShieldAlert, BookmarkCheck, Bookmark, Sparkles, 
+  Edit2, CheckCircle2 
+} from 'lucide-react';
 import { useDialog } from './Dialog';
 
 interface QuickDocumentModalProps {
@@ -60,10 +67,74 @@ export default function QuickDocumentModal({
   const [customCatalog, setCustomCatalog] = useState<CustomExamsCatalog>(() => getStoredCustomExams());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // Exam Routines State
+  const [examRoutines, setExamRoutines] = useState<ExamRoutine[]>(() => getStoredExamRoutines());
+  const [showRoutineContextMenu, setShowRoutineContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [showCreateRoutineModal, setShowCreateRoutineModal] = useState(false);
+  const [showExploreRoutinesModal, setShowExploreRoutinesModal] = useState(false);
+  const [editingRoutine, setEditingRoutine] = useState<ExamRoutine | null>(null);
+  const [routineSearchTerm, setRoutineSearchTerm] = useState('');
+  const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
+
+  // Form State for Creating/Editing Routine
+  const [routineForm, setRoutineForm] = useState<{
+    name: string;
+    category: 'laboratorial' | 'imagem' | 'geral';
+    description: string;
+    exams: string[];
+  }>({
+    name: '',
+    category: 'laboratorial',
+    description: '',
+    exams: []
+  });
+  const [routineExamSearch, setRoutineExamSearch] = useState('');
+  const [routineExamDropdown, setRoutineExamDropdown] = useState(false);
+  const routineDropdownRef = useRef<HTMLDivElement>(null);
+  const lastContextMenuClick = useRef<{ time: number } | null>(null);
+
   // Initialize or Reset
   useEffect(() => {
     if (isOpen) {
       setCustomCatalog(getStoredCustomExams());
+      const loaded = getStoredExamRoutines();
+      setExamRoutines(loaded);
+
+      // Sincroniza com Supabase se houver médico autenticado
+      if (doctor?.id) {
+        api.getRoutines(doctor.id, 'exam_routine').then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            const dbRoutines: ExamRoutine[] = data.map((r: any) => {
+              try {
+                const parsed = JSON.parse(r.content);
+                return {
+                  id: r.id,
+                  user_id: r.user_id,
+                  name: r.name,
+                  category: parsed.category || 'geral',
+                  description: parsed.description || '',
+                  exams: parsed.exams || [],
+                  created_at: r.created_at
+                };
+              } catch {
+                return {
+                  id: r.id,
+                  user_id: r.user_id,
+                  name: r.name,
+                  category: 'geral',
+                  description: '',
+                  exams: [],
+                  created_at: r.created_at
+                };
+              }
+            });
+            const map = new Map<string, ExamRoutine>();
+            loaded.forEach(item => map.set(item.id, item));
+            dbRoutines.forEach(item => map.set(item.id, item));
+            setExamRoutines(Array.from(map.values()));
+          }
+        }).catch(err => console.log('Could not load db exam routines', err));
+      }
     }
 
     if (initialDoc) {
@@ -93,6 +164,9 @@ export default function QuickDocumentModal({
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
+      }
+      if (routineDropdownRef.current && !routineDropdownRef.current.contains(event.target as Node)) {
+        setRoutineExamDropdown(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -192,6 +266,202 @@ export default function QuickDocumentModal({
     setCustomExams('');
   };
 
+  // ---------------- ROTINAS DE SOLICITAÇÃO DE EXAMES (DOUBLE RIGHT-CLICK & HANDLERS) ----------------
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (docType !== 'exam') return;
+
+    e.preventDefault();
+    const now = Date.now();
+    const DOUBLE_CLICK_DELAY = 500; // ms
+
+    if (lastContextMenuClick.current && (now - lastContextMenuClick.current.time < DOUBLE_CLICK_DELAY)) {
+      // Duplo clique com o botão direito detectado!
+      const menuWidth = 320;
+      const menuHeight = 380;
+      const x = Math.min(e.clientX, window.innerWidth - menuWidth - 20);
+      const y = Math.min(e.clientY, window.innerHeight - menuHeight - 20);
+      setShowRoutineContextMenu({ x: Math.max(10, x), y: Math.max(10, y) });
+      lastContextMenuClick.current = null;
+    } else {
+      lastContextMenuClick.current = { time: now };
+    }
+  };
+
+  const handleSelectRoutine = (routine: ExamRoutine) => {
+    if (!routine.exams || routine.exams.length === 0) {
+      dialog.alert("Atenção", "Esta rotina não possui exames cadastrados.");
+      return;
+    }
+
+    let addedCount = 0;
+    setSelectedExams(prev => {
+      const next = [...prev];
+      routine.exams.forEach(exam => {
+        if (!next.some(e => e.toLowerCase() === exam.toLowerCase())) {
+          next.push(exam);
+          addedCount++;
+        }
+      });
+      return next;
+    });
+
+    if (routine.category === 'imagem' && examCategory !== 'imagem') {
+      setExamCategory('imagem');
+    } else if (routine.category === 'laboratorial' && examCategory !== 'laboratorial') {
+      setExamCategory('laboratorial');
+    }
+
+    setShowRoutineContextMenu(null);
+    setShowExploreRoutinesModal(false);
+
+    setFeedbackToast(`Rotina "${routine.name}" aplicada! (${routine.exams.length} exames adicionados)`);
+    setTimeout(() => {
+      setFeedbackToast(null);
+    }, 3500);
+  };
+
+  const openCreateRoutineModal = (prefillWithCurrentExams: boolean = false) => {
+    setEditingRoutine(null);
+    setRoutineForm({
+      name: '',
+      category: examCategory === 'imagem' ? 'imagem' : 'laboratorial',
+      description: '',
+      exams: prefillWithCurrentExams && selectedExams.length > 0 ? [...selectedExams] : []
+    });
+    setRoutineExamSearch('');
+    setShowCreateRoutineModal(true);
+    setShowRoutineContextMenu(null);
+  };
+
+  const openEditRoutine = (routine: ExamRoutine) => {
+    setEditingRoutine(routine);
+    setRoutineForm({
+      name: routine.name,
+      category: routine.category,
+      description: routine.description || '',
+      exams: [...routine.exams]
+    });
+    setRoutineExamSearch('');
+    setShowCreateRoutineModal(true);
+    setShowRoutineContextMenu(null);
+    setShowExploreRoutinesModal(false);
+  };
+
+  const handleAddExamToRoutine = (input: string) => {
+    if (!input.trim()) return;
+    const items = input
+      .split(',')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    setRoutineForm(prev => {
+      const nextExams = [...prev.exams];
+      items.forEach(item => {
+        if (!nextExams.some(e => e.toLowerCase() === item.toLowerCase())) {
+          nextExams.push(item);
+        }
+      });
+      return { ...prev, exams: nextExams };
+    });
+    setRoutineExamSearch('');
+    setRoutineExamDropdown(false);
+  };
+
+  const handleSaveRoutine = async () => {
+    if (!routineForm.name.trim()) {
+      dialog.alert("Atenção", "Por favor, informe o nome da rotina.");
+      return;
+    }
+    if (routineForm.exams.length === 0) {
+      dialog.alert("Atenção", "Por favor, adicione ao menos um exame a esta rotina.");
+      return;
+    }
+
+    const routineToSave: ExamRoutine = {
+      id: editingRoutine?.id || `routine-${Date.now()}`,
+      name: routineForm.name.trim(),
+      category: routineForm.category,
+      description: routineForm.description.trim(),
+      exams: routineForm.exams,
+      created_at: editingRoutine?.created_at || new Date().toISOString(),
+      user_id: doctor?.id
+    };
+
+    // Salva localmente
+    const updated = saveExamRoutineToStorage(routineToSave);
+    setExamRoutines(updated);
+
+    // Sincroniza com Supabase se houver médico autenticado
+    if (doctor?.id) {
+      try {
+        const payload = {
+          user_id: doctor.id,
+          field_id: 'exam_routine',
+          name: routineToSave.name,
+          shortcut: '',
+          content: JSON.stringify({
+            exams: routineToSave.exams,
+            category: routineToSave.category,
+            description: routineToSave.description
+          })
+        };
+        if (editingRoutine && editingRoutine.id.length > 20) {
+          await api.updateRoutine(editingRoutine.id, payload);
+        } else {
+          await api.createRoutine(payload);
+        }
+      } catch (err) {
+        console.error("Erro ao sincronizar rotina com banco:", err);
+      }
+    }
+
+    setShowCreateRoutineModal(false);
+    setEditingRoutine(null);
+    setFeedbackToast(`Rotina "${routineToSave.name}" salva com sucesso!`);
+    setTimeout(() => setFeedbackToast(null), 3500);
+  };
+
+  const handleDeleteRoutine = async (routineId: string, routineName: string) => {
+    const confirmed = await dialog.confirm(
+      "Excluir Rotina",
+      `Deseja realmente excluir a rotina "${routineName}"?`,
+      "danger"
+    );
+    if (confirmed) {
+      const updated = deleteExamRoutineFromStorage(routineId);
+      setExamRoutines(updated);
+      if (doctor?.id) {
+        try {
+          await api.deleteRoutine(routineId);
+        } catch (err) {
+          console.error("Erro ao deletar rotina no banco:", err);
+        }
+      }
+    }
+  };
+
+  // Exames disponíveis para seleção ao criar/editar rotina (todos os laboratoriais e imagem)
+  const allAvailableForRoutine = Array.from(new Set([
+    ...(customCatalog.laboratorial || []),
+    ...(customCatalog.imagem || []),
+    ...UNIQUE_LAB_EXAMS,
+    ...UNIQUE_IMAGE_EXAMS
+  ])).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  const routineFilteredExams = allAvailableForRoutine.filter(exam =>
+    exam.toLowerCase().includes(routineExamSearch.toLowerCase().trim()) &&
+    !routineForm.exams.some(e => e.toLowerCase() === exam.toLowerCase())
+  );
+
+  const filteredExamRoutines = examRoutines.filter(r => {
+    const term = routineSearchTerm.toLowerCase().trim();
+    if (!term) return true;
+    return r.name.toLowerCase().includes(term) ||
+      (r.description && r.description.toLowerCase().includes(term)) ||
+      r.exams.some(e => e.toLowerCase().includes(term));
+  });
+
   const handleSave = async (shouldPrint: boolean = false) => {
     if (!patientId || !doctor) return;
 
@@ -283,7 +553,7 @@ export default function QuickDocumentModal({
         </div>
 
         {/* Modal Content */}
-        <div className="p-6 flex-1 overflow-y-auto space-y-6">
+        <div className="p-6 flex-1 overflow-y-auto space-y-6" onContextMenu={handleContextMenu}>
           
           {/* Main Document Type Selector */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
@@ -463,7 +733,7 @@ export default function QuickDocumentModal({
 
           {/* EXAM FORM */}
           {docType === 'exam' && (
-            <div className="space-y-6 animate-fade-in">
+            <div className="space-y-6 animate-fade-in" onContextMenu={handleContextMenu}>
               
               {/* Category Selector */}
               <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 max-w-md mx-auto">
@@ -499,10 +769,33 @@ export default function QuickDocumentModal({
 
               {/* Typeable Dropdown / Searchable Input */}
               <div className="relative" ref={dropdownRef}>
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5 flex justify-between items-center">
-                  <span>Buscar e Selecionar Exame ({examCategory === 'laboratorial' ? 'Laboratório' : 'Imagem'})</span>
-                  <span className="text-[10px] text-slate-400 font-normal">Pressione Enter para selecionar a 1ª opção</span>
-                </label>
+                <div className="flex justify-between items-center mb-1.5 flex-wrap gap-2">
+                  <label className="text-xs font-bold text-slate-600 uppercase flex items-center gap-1.5">
+                    <span>Buscar e Selecionar Exame ({examCategory === 'laboratorial' ? 'Laboratório' : 'Imagem'})</span>
+                  </label>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setShowRoutineContextMenu({ 
+                          x: Math.min(rect.left, window.innerWidth - 330), 
+                          y: Math.min(rect.bottom + 6, window.innerHeight - 390) 
+                        });
+                      }}
+                      className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200/90 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all shadow-xs group cursor-pointer"
+                      title="Clique ou dê duplo clique com botão direito nesta tela para abrir rotinas"
+                    >
+                      <BookmarkCheck size={14} className="text-blue-700 group-hover:scale-110 transition-transform" />
+                      <span>Rotinas de Exames</span>
+                      <span className="text-[9px] bg-blue-200/80 text-blue-900 px-1 py-0.2 rounded font-normal hidden sm:inline">
+                        Duplo clique direito
+                      </span>
+                    </button>
+                    <span className="text-[10px] text-slate-400 font-normal hidden md:inline">Enter para selecionar</span>
+                  </div>
+                </div>
                 
                 <div className="relative">
                   <input
@@ -701,6 +994,509 @@ export default function QuickDocumentModal({
         </div>
 
       </div>
+
+      {/* Floating Context Menu (Duplo clique com o botão direito) */}
+      {showRoutineContextMenu && (
+        <>
+          <div 
+            className="fixed inset-0 z-[9998]" 
+            onClick={() => setShowRoutineContextMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setShowRoutineContextMenu(null); }}
+          />
+          <div 
+            className="fixed z-[9999] bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 w-80 max-h-[85vh] flex flex-col animate-scale-in text-slate-800 overflow-hidden"
+            style={{ top: showRoutineContextMenu.y, left: showRoutineContextMenu.x }}
+          >
+            {/* Header */}
+            <div className="px-4 py-2.5 border-b border-slate-100 flex justify-between items-center bg-slate-50/90">
+              <div className="flex items-center gap-2">
+                <BookmarkCheck size={16} className="text-blue-900" />
+                <span className="font-bold text-xs uppercase tracking-wide text-slate-800">Rotinas de Exames</span>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowRoutineContextMenu(null)}
+                className="text-slate-400 hover:text-slate-600 p-0.5 rounded transition-colors"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Action: Create Routine */}
+            <div className="p-2 border-b border-slate-100 bg-blue-50/40">
+              <button 
+                type="button"
+                onClick={() => openCreateRoutineModal(selectedExams.length > 0)}
+                className="w-full text-left px-3 py-2 text-xs font-bold text-blue-900 hover:bg-blue-100/70 rounded-xl flex items-center justify-between transition-colors shadow-xs"
+              >
+                <span className="flex items-center gap-2">
+                  <Plus size={15} className="text-blue-700" />
+                  Criar rotina de exames
+                </span>
+                {selectedExams.length > 0 && (
+                  <span className="text-[10px] bg-blue-200/80 text-blue-900 px-1.5 py-0.5 rounded font-mono font-medium">
+                    +{selectedExams.length} da tela
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* Pre-created Routines List */}
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 max-h-60">
+              <p className="px-2 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                Rotinas pré-criadas (clique para adicionar)
+              </p>
+
+              {examRoutines.length === 0 ? (
+                <div className="text-center py-4 px-3 text-xs text-slate-400">
+                  Nenhuma rotina pré-criada ainda.<br />
+                  <button 
+                    type="button"
+                    onClick={() => openCreateRoutineModal(false)}
+                    className="text-blue-600 hover:underline font-bold mt-1 inline-block"
+                  >
+                    Criar minha primeira rotina
+                  </button>
+                </div>
+              ) : (
+                examRoutines.map(routine => (
+                  <div 
+                    key={routine.id}
+                    className="group flex items-center justify-between p-2 rounded-xl hover:bg-blue-50/70 transition-colors cursor-pointer border border-transparent hover:border-blue-100"
+                    onClick={() => handleSelectRoutine(routine)}
+                    title={`Adicionar ${routine.exams.length} exames desta rotina aos exames solicitados`}
+                  >
+                    <div className="min-w-0 pr-2 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <Bookmark size={13} className="text-blue-600 shrink-0" />
+                        <span className="text-xs font-bold text-slate-800 truncate group-hover:text-blue-900">
+                          {routine.name}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-0.5 truncate flex items-center gap-1">
+                        <span className="font-semibold text-slate-600">{routine.exams.length} exames</span>
+                        <span>•</span>
+                        <span className="truncate">{routine.exams.slice(0, 3).join(', ')}{routine.exams.length > 3 ? '...' : ''}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 shrink-0">
+                      <span className="text-[10px] bg-blue-100 text-blue-900 font-bold px-2 py-0.5 rounded-lg group-hover:bg-blue-900 group-hover:text-white transition-colors">
+                        + Inserir
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer link to explore / manage */}
+            {examRoutines.length > 0 && (
+              <div className="p-2 border-t border-slate-100 bg-slate-50">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowRoutineContextMenu(null);
+                    setShowExploreRoutinesModal(true);
+                  }}
+                  className="w-full text-center text-xs font-bold text-slate-600 hover:text-blue-700 py-1.5 rounded-lg hover:bg-slate-200/60 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Search size={13} /> Gerenciar / Explorar rotinas
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Create / Edit Routine Modal */}
+      {showCreateRoutineModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col animate-scale-in overflow-hidden border border-slate-200">
+            
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-100 text-blue-900 rounded-xl">
+                  <BookmarkCheck size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-base">
+                    {editingRoutine ? 'Editar Rotina de Exames' : 'Criar Nova Rotina de Exames'}
+                  </h3>
+                  <p className="text-xs text-slate-500">Agrupe exames frequentes para solicitar rapidamente com duplo clique.</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => { setShowCreateRoutineModal(false); setEditingRoutine(null); }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 overflow-y-auto space-y-4 flex-1">
+              
+              {/* Name */}
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                  Nome da Rotina <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="w-full p-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none"
+                  placeholder="Ex: Check-up Cardiológico, Pré-Operatório, Rastreio Renal..."
+                  value={routineForm.name}
+                  onChange={e => setRoutineForm({ ...routineForm, name: e.target.value })}
+                  autoFocus
+                />
+              </div>
+
+              {/* Category & Description */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Categoria
+                  </label>
+                  <select
+                    className="w-full p-2.5 text-xs font-medium border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none bg-white"
+                    value={routineForm.category}
+                    onChange={e => setRoutineForm({ ...routineForm, category: e.target.value as any })}
+                  >
+                    <option value="laboratorial">Laboratorial</option>
+                    <option value="imagem">Exames de Imagem</option>
+                    <option value="geral">Misto / Geral</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">
+                    Descrição / Indicação Clínica (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full p-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none"
+                    placeholder="Ex: Exames de rotina para acompanhamento anual"
+                    value={routineForm.description}
+                    onChange={e => setRoutineForm({ ...routineForm, description: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Quick import from currently selected exams */}
+              {selectedExams.length > 0 && (
+                <div className="bg-blue-50/80 border border-blue-200 p-3 rounded-xl flex items-center justify-between gap-3">
+                  <div className="text-xs text-blue-900">
+                    <span className="font-bold">Exames na tela:</span> Há {selectedExams.length} exame(s) selecionado(s) atualmente.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const combined = Array.from(new Set([...routineForm.exams, ...selectedExams]));
+                      setRoutineForm({ ...routineForm, exams: combined });
+                    }}
+                    className="px-3 py-1.5 bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold rounded-lg shrink-0 flex items-center gap-1.5 shadow-sm transition-colors"
+                  >
+                    <Sparkles size={13} />
+                    Importar todos ({selectedExams.length})
+                  </button>
+                </div>
+              )}
+
+              {/* Add exams to routine */}
+              <div className="relative" ref={routineDropdownRef}>
+                <label className="block text-xs font-bold text-slate-600 uppercase mb-1 flex justify-between items-center">
+                  <span>Adicionar Exames à Rotina</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Pressione Enter ou separe por vírgula</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    className="w-full pl-9 pr-24 py-2.5 bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none text-xs text-slate-800"
+                    placeholder="Digite o nome do exame para adicionar à rotina..."
+                    value={routineExamSearch}
+                    onChange={e => {
+                      setRoutineExamSearch(e.target.value);
+                      setRoutineExamDropdown(true);
+                    }}
+                    onFocus={() => setRoutineExamDropdown(true)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (routineFilteredExams.length > 0 && !routineExamSearch.includes(',')) {
+                          handleAddExamToRoutine(routineFilteredExams[0]);
+                        } else if (routineExamSearch.trim()) {
+                          handleAddExamToRoutine(routineExamSearch.trim());
+                        }
+                      }
+                    }}
+                  />
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <button
+                    type="button"
+                    disabled={!routineExamSearch.trim()}
+                    onClick={() => {
+                      if (routineExamSearch.trim()) {
+                        handleAddExamToRoutine(routineExamSearch.trim());
+                      }
+                    }}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-blue-900 text-white rounded-lg text-xs font-bold disabled:opacity-40 disabled:bg-slate-300"
+                  >
+                    Adicionar
+                  </button>
+
+                  {/* Dropdown in Routine Modal */}
+                  {routineExamDropdown && routineExamSearch.trim().length > 0 && (
+                    <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
+                      {routineFilteredExams.slice(0, 10).map((exam, idx) => (
+                        <div
+                          key={exam}
+                          onClick={() => handleAddExamToRoutine(exam)}
+                          className="px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer flex justify-between items-center text-slate-700 font-medium"
+                        >
+                          <span>{exam}</span>
+                          {idx === 0 && (
+                            <span className="text-[10px] text-blue-600 bg-blue-100 px-1 rounded">Enter ↵</span>
+                          )}
+                        </div>
+                      ))}
+                      {routineFilteredExams.length === 0 && (
+                        <div 
+                          onClick={() => handleAddExamToRoutine(routineExamSearch.trim())}
+                          className="p-2.5 text-xs text-blue-800 hover:bg-blue-50 cursor-pointer text-center font-medium"
+                        >
+                          + Adicionar "<b>{routineExamSearch.trim()}</b>" como novo exame
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Selected exams in routine */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-xs font-bold text-slate-600 uppercase">
+                    Exames Inclusos na Rotina ({routineForm.exams.length})
+                  </span>
+                  {routineForm.exams.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setRoutineForm({ ...routineForm, exams: [] })}
+                      className="text-[11px] text-red-500 hover:text-red-700 font-medium"
+                    >
+                      Remover todos
+                    </button>
+                  )}
+                </div>
+
+                {routineForm.exams.length === 0 ? (
+                  <div className="p-4 border-2 border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400">
+                    Nenhum exame adicionado nesta rotina ainda. Adicione exames pelo campo acima ou importe da tela.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    {routineForm.exams.map((ex, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-900 text-white rounded-lg text-xs font-medium shadow-xs"
+                      >
+                        <span className="text-[10px] text-blue-200 font-mono">{idx + 1}.</span>
+                        <span>{ex}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRoutineForm({
+                              ...routineForm,
+                              exams: routineForm.exams.filter((_, i) => i !== idx)
+                            });
+                          }}
+                          className="p-0.5 hover:bg-blue-800 rounded text-blue-200 hover:text-white"
+                          title="Remover este exame da rotina"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => { setShowCreateRoutineModal(false); setEditingRoutine(null); }}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveRoutine}
+                className="px-5 py-2 text-xs font-bold bg-blue-900 hover:bg-blue-800 text-white rounded-xl shadow-md shadow-blue-900/20 transition-all flex items-center gap-1.5"
+              >
+                <Check size={14} />
+                {editingRoutine ? 'Atualizar Rotina' : 'Salvar Rotina'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Explore / Manage Routines Modal */}
+      {showExploreRoutinesModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col animate-scale-in overflow-hidden border border-slate-200">
+            
+            {/* Header */}
+            <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-100 text-blue-900 rounded-xl">
+                  <BookmarkCheck size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-base">Minhas Rotinas de Exames</h3>
+                  <p className="text-xs text-slate-500">Selecione uma rotina para incluir na solicitação ou gerencie suas rotinas.</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowExploreRoutinesModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-200 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Toolbar: Search and Create */}
+            <div className="p-4 border-b border-slate-100 flex gap-2.5 bg-white shrink-0">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  className="w-full pl-9 pr-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-900 outline-none"
+                  placeholder="Buscar rotinas por nome ou exame..."
+                  value={routineSearchTerm}
+                  onChange={e => setRoutineSearchTerm(e.target.value)}
+                />
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowExploreRoutinesModal(false);
+                  openCreateRoutineModal(selectedExams.length > 0);
+                }}
+                className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 shadow-sm transition-colors"
+              >
+                <Plus size={14} />
+                Nova Rotina
+              </button>
+            </div>
+
+            {/* Routine Cards List */}
+            <div className="p-4 overflow-y-auto space-y-3 flex-1">
+              {filteredExamRoutines.length === 0 ? (
+                <div className="text-center py-10 text-slate-400 text-xs">
+                  Nenhuma rotina encontrada com os critérios pesquisados.
+                </div>
+              ) : (
+                filteredExamRoutines.map(routine => (
+                  <div
+                    key={routine.id}
+                    className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-blue-50/30 hover:border-blue-200 transition-all group"
+                  >
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-bold text-slate-800 text-sm">{routine.name}</h4>
+                          <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                            {routine.category === 'laboratorial' ? 'Laboratório' : routine.category === 'imagem' ? 'Imagem' : 'Geral'}
+                          </span>
+                          <span className="text-[11px] font-semibold text-blue-900 bg-blue-100 px-2 py-0.5 rounded-full">
+                            {routine.exams.length} exames
+                          </span>
+                        </div>
+                        {routine.description && (
+                          <p className="text-xs text-slate-500 mt-1 italic">{routine.description}</p>
+                        )}
+
+                        {/* Badges preview */}
+                        <div className="flex flex-wrap gap-1 mt-2.5">
+                          {routine.exams.map((ex, i) => (
+                            <span
+                              key={i}
+                              className="text-[11px] bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded-md font-medium"
+                            >
+                              {ex}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectRoutine(routine)}
+                          className="px-3 py-1.5 bg-blue-900 hover:bg-blue-800 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm transition-colors"
+                        >
+                          <Plus size={13} />
+                          Adicionar aos Exames
+                        </button>
+
+                        <div className="flex items-center gap-1 mt-1 sm:mt-0">
+                          <button
+                            type="button"
+                            onClick={() => openEditRoutine(routine)}
+                            className="p-1.5 text-slate-400 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Editar rotina"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRoutine(routine.id, routine.name)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Excluir rotina"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 border-t border-slate-200 bg-slate-50 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowExploreRoutinesModal(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* Floating Feedback Toast */}
+      {feedbackToast && (
+        <div className="fixed bottom-6 right-6 z-[10002] bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-2.5 animate-slide-up text-xs font-semibold">
+          <CheckCircle2 size={16} className="text-emerald-400 shrink-0" />
+          <span>{feedbackToast}</span>
+        </div>
+      )}
     </div>
   );
 }

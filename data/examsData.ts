@@ -1,3 +1,5 @@
+import { ExamRoutine } from '../types';
+
 export const LAB_EXAMS: string[] = [
   "Ácido fólico",
   "Ácido láctico (lactato)",
@@ -312,3 +314,117 @@ export function removeCustomExamFromStorage(
     return getStoredCustomExams();
   }
 }
+
+// ---------------- EXAM ROUTINES (ROTINAS DE SOLICITAÇÃO DE EXAMES) ----------------
+
+export const EXAM_ROUTINES_STORAGE_KEY = 'genesis_exam_routines';
+
+export const DEFAULT_EXAM_ROUTINES: ExamRoutine[] = [
+  {
+    id: 'routine-checkup-geral',
+    name: 'Check-up Básico (Geral)',
+    category: 'laboratorial',
+    description: 'Rotina anual preventiva com exames laboratoriais básicos',
+    exams: [
+      'Hemograma completo',
+      'Glicemia de jejum',
+      'Creatinina',
+      'Ureia',
+      'Colesterol total e frações (Lipidograma)',
+      'Triglicerídeos',
+      'TGO (AST)',
+      'TGP (ALT)',
+      'TSH',
+      'Urina tipo I (EAS)'
+    ],
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'routine-pre-operatorio',
+    name: 'Pré-Operatório Básico',
+    category: 'geral',
+    description: 'Avaliação pré-anestésica e cirúrgica básica',
+    exams: [
+      'Hemograma completo',
+      'Coagulograma completo (TAP + TTPA)',
+      'Glicemia de jejum',
+      'Ureia',
+      'Creatinina',
+      'Eletrocardiograma (ECG)',
+      'Radiografia de tórax (PA e Perfil)'
+    ],
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 'routine-metabolico-cardio',
+    name: 'Rastreio Metabólico & Cardiovascular',
+    category: 'laboratorial',
+    description: 'Acompanhamento de hipertensão arterial, dislipidemia e diabetes',
+    exams: [
+      'Hemoglobina glicada (HbA1c)',
+      'Glicemia de jejum',
+      'Colesterol total e frações (Lipidograma)',
+      'Triglicerídeos',
+      'Creatinina',
+      'Potássio',
+      'Sódio',
+      'Microalbuminúria'
+    ],
+    created_at: new Date().toISOString()
+  }
+];
+
+export function getStoredExamRoutines(): ExamRoutine[] {
+  try {
+    if (typeof window === 'undefined') return DEFAULT_EXAM_ROUTINES;
+    const raw = localStorage.getItem(EXAM_ROUTINES_STORAGE_KEY);
+    if (!raw) {
+      localStorage.setItem(EXAM_ROUTINES_STORAGE_KEY, JSON.stringify(DEFAULT_EXAM_ROUTINES));
+      return DEFAULT_EXAM_ROUTINES;
+    }
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+    return DEFAULT_EXAM_ROUTINES;
+  } catch (e) {
+    console.error('Erro ao ler rotinas de exames do localStorage:', e);
+    return DEFAULT_EXAM_ROUTINES;
+  }
+}
+
+export function saveExamRoutineToStorage(routine: ExamRoutine): ExamRoutine[] {
+  try {
+    const list = getStoredExamRoutines();
+    const existingIndex = list.findIndex(r => r.id === routine.id);
+    let updated: ExamRoutine[];
+    if (existingIndex >= 0) {
+      updated = [...list];
+      updated[existingIndex] = routine;
+    } else {
+      updated = [routine, ...list];
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(EXAM_ROUTINES_STORAGE_KEY, JSON.stringify(updated));
+    }
+    return updated;
+  } catch (e) {
+    console.error('Erro ao salvar rotina de exames:', e);
+    return getStoredExamRoutines();
+  }
+}
+
+export function deleteExamRoutineFromStorage(id: string): ExamRoutine[] {
+  try {
+    const list = getStoredExamRoutines();
+    const updated = list.filter(r => r.id !== id);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(EXAM_ROUTINES_STORAGE_KEY, JSON.stringify(updated));
+    }
+    return updated;
+  } catch (e) {
+    console.error('Erro ao remover rotina de exames:', e);
+    return getStoredExamRoutines();
+  }
+}
+
