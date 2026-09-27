@@ -323,13 +323,55 @@ export const api = {
   markNotificationRead: async (id: string) => supabase.from('notifications').update({ read: true }).eq('id', id),
   markAllNotificationsRead: async (userId: string) => supabase.from('notifications').update({ read: true }).eq('user_id', userId),
 
-  // Routines
+  // Routines (Anamnesis, Exam Routines, Custom Catalogs)
   getRoutines: async (userId: string, fieldId?: string) => {
     let query = supabase.from('routines').select('*').eq('user_id', userId);
     if (fieldId) query = query.eq('field_id', fieldId);
     return query.order('name');
   },
-  createRoutine: async (routine: any) => supabase.from('routines').insert(routine),
-  updateRoutine: async (id: string, updates: any) => supabase.from('routines').update(updates).eq('id', id),
+  createRoutine: async (routine: any) => supabase.from('routines').insert(routine).select().single(),
+  updateRoutine: async (id: string, updates: any) => supabase.from('routines').update(updates).eq('id', id).select().single(),
   deleteRoutine: async (id: string) => supabase.from('routines').delete().eq('id', id),
+
+  // Custom Exams Catalog in Supabase
+  getCustomExamsCatalog: async (userId: string) => {
+    return supabase
+      .from('routines')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('field_id', 'custom_exams_catalog')
+      .maybeSingle();
+  },
+  saveCustomExamsCatalog: async (userId: string, catalog: { laboratorial: string[]; imagem: string[] }) => {
+    const { data: existing } = await supabase
+      .from('routines')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('field_id', 'custom_exams_catalog')
+      .maybeSingle();
+
+    if (existing?.id) {
+      return supabase
+        .from('routines')
+        .update({
+          content: JSON.stringify(catalog),
+          name: 'Catálogo de Exames Personalizados'
+        })
+        .eq('id', existing.id)
+        .select()
+        .single();
+    } else {
+      return supabase
+        .from('routines')
+        .insert({
+          user_id: userId,
+          field_id: 'custom_exams_catalog',
+          name: 'Catálogo de Exames Personalizados',
+          shortcut: '',
+          content: JSON.stringify(catalog)
+        })
+        .select()
+        .single();
+    }
+  },
 };

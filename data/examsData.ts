@@ -1,4 +1,5 @@
 import { ExamRoutine } from '../types';
+import { api } from '../supabaseClient';
 
 export const LAB_EXAMS: string[] = [
   "Ácido fólico",
@@ -315,6 +316,115 @@ export function removeCustomExamFromStorage(
   }
 }
 
+// ---------------- SUPABASE INTEGRATION FOR CUSTOM EXAMS ----------------
+
+export async function fetchCustomExamsFromSupabase(userId: string): Promise<CustomExamsCatalog> {
+  try {
+    if (!userId) return getStoredCustomExams();
+
+    const { data, error } = await api.getCustomExamsCatalog(userId);
+    if (!error && data?.content) {
+      try {
+        const parsed = JSON.parse(data.content);
+        const catalog: CustomExamsCatalog = {
+          laboratorial: Array.isArray(parsed?.laboratorial) ? parsed.laboratorial.map((s: any) => String(s).trim()).filter(Boolean) : [],
+          imagem: Array.isArray(parsed?.imagem) ? parsed.imagem.map((s: any) => String(s).trim()).filter(Boolean) : []
+        };
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(CUSTOM_EXAMS_STORAGE_KEY, JSON.stringify(catalog));
+        }
+        return catalog;
+      } catch (parseErr) {
+        console.error('Erro ao decodificar JSON do catálogo do Supabase:', parseErr);
+      }
+    }
+
+    // Se ainda não existir no Supabase para este médico, verificar se há dados no cache local e migrar
+    const local = getStoredCustomExams();
+    if (local.laboratorial.length > 0 || local.imagem.length > 0) {
+      try {
+        await api.saveCustomExamsCatalog(userId, local);
+      } catch (saveErr) {
+        console.warn('Erro ao migrar catálogo local para o Supabase:', saveErr);
+      }
+      return local;
+    }
+
+    return { laboratorial: [], imagem: [] };
+  } catch (err) {
+    console.error('Erro ao buscar catálogo de exames no Supabase:', err);
+    return getStoredCustomExams();
+  }
+}
+
+export async function saveCustomExamsToSupabase(
+  userId: string | undefined,
+  newExams: string[],
+  category: 'laboratorial' | 'imagem',
+  currentCatalog?: CustomExamsCatalog
+): Promise<CustomExamsCatalog> {
+  const current: CustomExamsCatalog = currentCatalog 
+    ? { laboratorial: [...(currentCatalog.laboratorial || [])], imagem: [...(currentCatalog.imagem || [])] }
+    : getStoredCustomExams();
+
+  const cleanList = newExams.map(e => e.trim()).filter(e => e.length > 0);
+  const baseList = category === 'laboratorial' ? UNIQUE_LAB_EXAMS : UNIQUE_IMAGE_EXAMS;
+  const baseSet = new Set(baseList.map(e => e.toLowerCase()));
+  const customSet = new Set((current[category] || []).map(e => e.toLowerCase()));
+
+  const newlyAdded: string[] = [];
+  cleanList.forEach(exam => {
+    const lower = exam.toLowerCase();
+    if (!baseSet.has(lower) && !customSet.has(lower)) {
+      customSet.add(lower);
+      newlyAdded.push(exam);
+    }
+  });
+
+  if (newlyAdded.length > 0) {
+    current[category] = [...(current[category] || []), ...newlyAdded];
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(CUSTOM_EXAMS_STORAGE_KEY, JSON.stringify(current));
+    }
+    if (userId) {
+      try {
+        await api.saveCustomExamsCatalog(userId, current);
+      } catch (err) {
+        console.error('Erro ao salvar exames personalizados no Supabase:', err);
+      }
+    }
+  }
+
+  return current;
+}
+
+export async function removeCustomExamFromSupabase(
+  userId: string | undefined,
+  examName: string,
+  category: 'laboratorial' | 'imagem',
+  currentCatalog?: CustomExamsCatalog
+): Promise<CustomExamsCatalog> {
+  const current: CustomExamsCatalog = currentCatalog 
+    ? { laboratorial: [...(currentCatalog.laboratorial || [])], imagem: [...(currentCatalog.imagem || [])] }
+    : getStoredCustomExams();
+
+  const targetLower = examName.trim().toLowerCase();
+  current[category] = (current[category] || []).filter(e => e.trim().toLowerCase() !== targetLower);
+
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(CUSTOM_EXAMS_STORAGE_KEY, JSON.stringify(current));
+  }
+  if (userId) {
+    try {
+      await api.saveCustomExamsCatalog(userId, current);
+    } catch (err) {
+      console.error('Erro ao remover exame personalizado do Supabase:', err);
+    }
+  }
+
+  return current;
+}
+
 // ---------------- EXAM ROUTINES (ROTINAS DE SOLICITAÇÃO DE EXAMES) ----------------
 
 export const EXAM_ROUTINES_STORAGE_KEY = 'genesis_exam_routines';
@@ -425,6 +535,155 @@ export function deleteExamRoutineFromStorage(id: string): ExamRoutine[] {
   } catch (e) {
     console.error('Erro ao remover rotina de exames:', e);
     return getStoredExamRoutines();
+  }
+}
+
+// ---------------- SUPABASE INTEGRATION FOR EXAM ROUTINES ----------------
+
+export async function fetchExamRoutinesFromSupabase(userId: string): Promise<ExamRoutine[]> {
+  try {
+    if (!userId) return getStoredExamRoutines();
+
+    const { data, error } = await api.getRoutines(userId, 'exam_routine');
+    if (!error && data && data.length > 0) {
+      const dbRoutines: ExamRoutine[] = data.map((r: any) => {
+        try {
+          const parsed = typeof r.content === 'string' ? JSON.parse(r.content) : r.content;
+          return {
+            id: r.id,
+            user_id: r.user_id,
+            name: r.name,
+            category: parsed?.category || 'geral',
+            description: parsed?.description || '',
+            exams: Array.isArray(parsed?.exams) ? parsed.exams : [],
+            created_at: r.created_at
+          };
+        } catch {
+          return {
+            id: r.id,
+            user_id: r.user_id,
+            name: r.name,
+            category: 'geral',
+            description: '',
+            exams: [],
+            created_at: r.created_at
+          };
+        }
+      });
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(EXAM_ROUTINES_STORAGE_KEY, JSON.stringify(dbRoutines));
+      }
+      return dbRoutines;
+    }
+
+    // Se o médico ainda não tiver nenhuma rotina de exames salva no Supabase:
+    // Persistimos as rotinas padrão iniciais no banco de dados para ele com UUIDs reais!
+    const seededRoutines: ExamRoutine[] = [];
+    for (const defRoutine of DEFAULT_EXAM_ROUTINES) {
+      try {
+        const payload = {
+          user_id: userId,
+          field_id: 'exam_routine',
+          name: defRoutine.name,
+          shortcut: '',
+          content: JSON.stringify({
+            category: defRoutine.category,
+            description: defRoutine.description || '',
+            exams: defRoutine.exams
+          })
+        };
+        const { data: created, error: createError } = await api.createRoutine(payload);
+        if (!createError && created?.id) {
+          seededRoutines.push({
+            ...defRoutine,
+            id: created.id,
+            user_id: userId,
+            created_at: created.created_at || new Date().toISOString()
+          });
+        }
+      } catch (seedErr) {
+        console.warn('Erro ao inicializar rotina padrão no Supabase:', seedErr);
+      }
+    }
+
+    if (seededRoutines.length > 0) {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(EXAM_ROUTINES_STORAGE_KEY, JSON.stringify(seededRoutines));
+      }
+      return seededRoutines;
+    }
+
+    return DEFAULT_EXAM_ROUTINES;
+  } catch (err) {
+    console.error('Erro ao buscar rotinas de exames no Supabase:', err);
+    return getStoredExamRoutines();
+  }
+}
+
+export async function saveExamRoutineToSupabase(
+  userId: string,
+  routine: ExamRoutine
+): Promise<ExamRoutine> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(routine.id);
+  const payload = {
+    user_id: userId,
+    field_id: 'exam_routine',
+    name: routine.name.trim(),
+    shortcut: '',
+    content: JSON.stringify({
+      category: routine.category,
+      description: routine.description?.trim() || '',
+      exams: routine.exams
+    })
+  };
+
+  let savedRoutine: ExamRoutine = { ...routine, user_id: userId };
+
+  if (isUuid) {
+    try {
+      const { data, error } = await api.updateRoutine(routine.id, payload);
+      if (!error && data) {
+        savedRoutine = {
+          ...routine,
+          id: data.id,
+          created_at: data.created_at || routine.created_at
+        };
+      }
+    } catch (updateErr) {
+      console.error('Erro ao atualizar rotina no Supabase:', updateErr);
+    }
+  } else {
+    try {
+      const { data, error } = await api.createRoutine(payload);
+      if (!error && data) {
+        savedRoutine = {
+          ...routine,
+          id: data.id,
+          created_at: data.created_at || new Date().toISOString()
+        };
+      }
+    } catch (createErr) {
+      console.error('Erro ao criar rotina no Supabase:', createErr);
+    }
+  }
+
+  // Atualiza cache local
+  saveExamRoutineToStorage(savedRoutine);
+  return savedRoutine;
+}
+
+export async function deleteExamRoutineFromSupabase(
+  routineId: string
+): Promise<void> {
+  deleteExamRoutineFromStorage(routineId);
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(routineId);
+  if (isUuid) {
+    try {
+      await api.deleteRoutine(routineId);
+    } catch (err) {
+      console.error('Erro ao deletar rotina no Supabase:', err);
+    }
   }
 }
 

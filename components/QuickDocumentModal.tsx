@@ -10,7 +10,13 @@ import {
   CustomExamsCatalog,
   getStoredExamRoutines,
   saveExamRoutineToStorage,
-  deleteExamRoutineFromStorage
+  deleteExamRoutineFromStorage,
+  fetchCustomExamsFromSupabase,
+  saveCustomExamsToSupabase,
+  removeCustomExamFromSupabase,
+  fetchExamRoutinesFromSupabase,
+  saveExamRoutineToSupabase,
+  deleteExamRoutineFromSupabase
 } from '../data/examsData';
 import { 
   X, Plus, PlusCircle, Trash2, ChevronDown, Search, Check, Printer, 
@@ -74,6 +80,7 @@ export default function QuickDocumentModal({
   const [showExploreRoutinesModal, setShowExploreRoutinesModal] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState<ExamRoutine | null>(null);
   const [routineSearchTerm, setRoutineSearchTerm] = useState('');
+  const [routineContextMenuSearch, setRoutineContextMenuSearch] = useState('');
   const [feedbackToast, setFeedbackToast] = useState<string | null>(null);
 
   // Form State for Creating/Editing Routine
@@ -96,44 +103,19 @@ export default function QuickDocumentModal({
   // Initialize or Reset
   useEffect(() => {
     if (isOpen) {
+      // Carrega do cache instantâneo para UI inicial imediata
       setCustomCatalog(getStoredCustomExams());
-      const loaded = getStoredExamRoutines();
-      setExamRoutines(loaded);
+      setExamRoutines(getStoredExamRoutines());
 
-      // Sincroniza com Supabase se houver médico autenticado
+      // Sincroniza diretamente com o Supabase com base no médico autenticado
       if (doctor?.id) {
-        api.getRoutines(doctor.id, 'exam_routine').then(({ data, error }) => {
-          if (!error && data && data.length > 0) {
-            const dbRoutines: ExamRoutine[] = data.map((r: any) => {
-              try {
-                const parsed = JSON.parse(r.content);
-                return {
-                  id: r.id,
-                  user_id: r.user_id,
-                  name: r.name,
-                  category: parsed.category || 'geral',
-                  description: parsed.description || '',
-                  exams: parsed.exams || [],
-                  created_at: r.created_at
-                };
-              } catch {
-                return {
-                  id: r.id,
-                  user_id: r.user_id,
-                  name: r.name,
-                  category: 'geral',
-                  description: '',
-                  exams: [],
-                  created_at: r.created_at
-                };
-              }
-            });
-            const map = new Map<string, ExamRoutine>();
-            loaded.forEach(item => map.set(item.id, item));
-            dbRoutines.forEach(item => map.set(item.id, item));
-            setExamRoutines(Array.from(map.values()));
-          }
-        }).catch(err => console.log('Could not load db exam routines', err));
+        fetchCustomExamsFromSupabase(doctor.id).then(catalog => {
+          setCustomCatalog(catalog);
+        }).catch(err => console.error("Erro ao buscar exames personalizados no Supabase:", err));
+
+        fetchExamRoutinesFromSupabase(doctor.id).then(routines => {
+          setExamRoutines(routines);
+        }).catch(err => console.error("Erro ao buscar rotinas no Supabase:", err));
       }
     }
 
@@ -186,6 +168,17 @@ export default function QuickDocumentModal({
     !selectedExams.includes(exam)
   );
 
+  // Filter routines in floating context menu based on routineContextMenuSearch
+  const filteredContextMenuRoutines = examRoutines.filter(r => {
+    if (!routineContextMenuSearch.trim()) return true;
+    const term = routineContextMenuSearch.toLowerCase().trim();
+    return (
+      r.name.toLowerCase().includes(term) ||
+      (r.description && r.description.toLowerCase().includes(term)) ||
+      r.exams.some(ex => ex.toLowerCase().includes(term))
+    );
+  });
+
   const isExamCustom = (examName: string) => {
     return (customCatalog[examCategory] || []).some(
       c => c.trim().toLowerCase() === examName.trim().toLowerCase()
@@ -207,29 +200,31 @@ export default function QuickDocumentModal({
   const handleDeleteCustomExam = async (examName: string) => {
     const confirmed = await dialog.confirm(
       "Excluir Exame",
-      `Tem certeza que deseja excluir o exame "${examName}" do buscador oficial?`,
+      `Tem certeza que deseja excluir o exame "${examName}" do banco de dados oficial?`,
       "danger"
     );
     if (confirmed) {
-      const updated = removeCustomExamFromStorage(examName, examCategory);
+      const updated = await removeCustomExamFromSupabase(doctor?.id, examName, examCategory, customCatalog);
       setCustomCatalog(updated);
       setSelectedExams(prev => prev.filter(e => e.trim().toLowerCase() !== examName.trim().toLowerCase()));
+      setFeedbackToast(`Exame "${examName}" removido do banco com sucesso.`);
+      setTimeout(() => setFeedbackToast(null), 3000);
     }
   };
 
-  const handleKeyDownSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDownSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (filteredExams.length > 0) {
         // Select top matching option
         handleAddExam(filteredExams[0]);
       } else if (examSearch.trim().length > 0) {
-        // Add custom exam and integrate into the official catalog
+        // Add custom exam and integrate into the official catalog and Supabase
         const newExam = examSearch.trim();
         if (!selectedExams.some(e => e.toLowerCase() === newExam.toLowerCase())) {
           setSelectedExams(prev => [...prev, newExam]);
         }
-        const updated = saveCustomExamsToStorage([newExam], examCategory);
+        const updated = await saveCustomExamsToSupabase(doctor?.id, [newExam], examCategory, customCatalog);
         setCustomCatalog(updated);
         setExamSearch('');
         setShowDropdown(false);
@@ -238,7 +233,7 @@ export default function QuickDocumentModal({
   };
 
   // Add custom exams split by comma and integrate into the official catalog
-  const handleAddCustomCommas = () => {
+  const handleAddCustomCommas = async () => {
     if (!customExams.trim()) return;
     const parts = customExams
       .split(',')
@@ -258,8 +253,8 @@ export default function QuickDocumentModal({
       return next;
     });
 
-    // Integrate into the official searchable catalog
-    const updated = saveCustomExamsToStorage(parts, examCategory);
+    // Integrate into the official searchable catalog in Supabase
+    const updated = await saveCustomExamsToSupabase(doctor?.id, parts, examCategory, customCatalog);
     setCustomCatalog(updated);
 
     // Clear Outros textarea
@@ -272,16 +267,23 @@ export default function QuickDocumentModal({
     if (docType !== 'exam') return;
 
     e.preventDefault();
+    e.stopPropagation();
     const now = Date.now();
     const DOUBLE_CLICK_DELAY = 500; // ms
+    const MIN_CLICK_DELAY = 80; // ms: previne que disparos imediatos ou múltiplos do mesmo clique acionem o duplo clique
 
-    if (lastContextMenuClick.current && (now - lastContextMenuClick.current.time < DOUBLE_CLICK_DELAY)) {
-      // Duplo clique com o botão direito detectado!
-      const menuWidth = 320;
-      const menuHeight = 380;
+    if (
+      lastContextMenuClick.current &&
+      (now - lastContextMenuClick.current.time <= DOUBLE_CLICK_DELAY) &&
+      (now - lastContextMenuClick.current.time >= MIN_CLICK_DELAY)
+    ) {
+      // Duplo clique com o botão direito confirmado!
+      const menuWidth = 350;
+      const menuHeight = 460;
       const x = Math.min(e.clientX, window.innerWidth - menuWidth - 20);
       const y = Math.min(e.clientY, window.innerHeight - menuHeight - 20);
       setShowRoutineContextMenu({ x: Math.max(10, x), y: Math.max(10, y) });
+      setRoutineContextMenuSearch('');
       lastContextMenuClick.current = null;
     } else {
       lastContextMenuClick.current = { time: now };
@@ -313,6 +315,7 @@ export default function QuickDocumentModal({
     }
 
     setShowRoutineContextMenu(null);
+    setRoutineContextMenuSearch('');
     setShowExploreRoutinesModal(false);
 
     setFeedbackToast(`Rotina "${routine.name}" aplicada! (${routine.exams.length} exames adicionados)`);
@@ -332,6 +335,7 @@ export default function QuickDocumentModal({
     setRoutineExamSearch('');
     setShowCreateRoutineModal(true);
     setShowRoutineContextMenu(null);
+    setRoutineContextMenuSearch('');
   };
 
   const openEditRoutine = (routine: ExamRoutine) => {
@@ -345,6 +349,7 @@ export default function QuickDocumentModal({
     setRoutineExamSearch('');
     setShowCreateRoutineModal(true);
     setShowRoutineContextMenu(null);
+    setRoutineContextMenuSearch('');
     setShowExploreRoutinesModal(false);
   };
 
@@ -388,56 +393,37 @@ export default function QuickDocumentModal({
       user_id: doctor?.id
     };
 
-    // Salva localmente
-    const updated = saveExamRoutineToStorage(routineToSave);
-    setExamRoutines(updated);
-
-    // Sincroniza com Supabase se houver médico autenticado
-    if (doctor?.id) {
-      try {
-        const payload = {
-          user_id: doctor.id,
-          field_id: 'exam_routine',
-          name: routineToSave.name,
-          shortcut: '',
-          content: JSON.stringify({
-            exams: routineToSave.exams,
-            category: routineToSave.category,
-            description: routineToSave.description
-          })
-        };
-        if (editingRoutine && editingRoutine.id.length > 20) {
-          await api.updateRoutine(editingRoutine.id, payload);
-        } else {
-          await api.createRoutine(payload);
-        }
-      } catch (err) {
-        console.error("Erro ao sincronizar rotina com banco:", err);
+    // Salva diretamente no Supabase (banco de dados)
+    const saved = await saveExamRoutineToSupabase(doctor?.id, routineToSave);
+    
+    // Atualiza estado de rotinas
+    setExamRoutines(prev => {
+      const idx = prev.findIndex(r => r.id === routineToSave.id || (saved.id && r.id === saved.id));
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = saved;
+        return next;
       }
-    }
+      return [saved, ...prev];
+    });
 
     setShowCreateRoutineModal(false);
     setEditingRoutine(null);
-    setFeedbackToast(`Rotina "${routineToSave.name}" salva com sucesso!`);
+    setFeedbackToast(`Rotina "${saved.name}" salva no banco de dados com sucesso!`);
     setTimeout(() => setFeedbackToast(null), 3500);
   };
 
   const handleDeleteRoutine = async (routineId: string, routineName: string) => {
     const confirmed = await dialog.confirm(
       "Excluir Rotina",
-      `Deseja realmente excluir a rotina "${routineName}"?`,
+      `Deseja realmente excluir a rotina "${routineName}" do banco de dados?`,
       "danger"
     );
     if (confirmed) {
-      const updated = deleteExamRoutineFromStorage(routineId);
-      setExamRoutines(updated);
-      if (doctor?.id) {
-        try {
-          await api.deleteRoutine(routineId);
-        } catch (err) {
-          console.error("Erro ao deletar rotina no banco:", err);
-        }
-      }
+      await deleteExamRoutineFromSupabase(routineId);
+      setExamRoutines(prev => prev.filter(r => r.id !== routineId));
+      setFeedbackToast(`Rotina "${routineName}" excluída do banco com sucesso.`);
+      setTimeout(() => setFeedbackToast(null), 3500);
     }
   };
 
@@ -477,7 +463,7 @@ export default function QuickDocumentModal({
             finalSelected.push(part);
           }
         });
-        const updated = saveCustomExamsToStorage(parts, examCategory);
+        const updated = await saveCustomExamsToSupabase(doctor?.id, parts, examCategory, customCatalog);
         setCustomCatalog(updated);
       }
     }
@@ -733,7 +719,7 @@ export default function QuickDocumentModal({
 
           {/* EXAM FORM */}
           {docType === 'exam' && (
-            <div className="space-y-6 animate-fade-in" onContextMenu={handleContextMenu}>
+            <div className="space-y-6 animate-fade-in">
               
               {/* Category Selector */}
               <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 max-w-md mx-auto">
@@ -777,20 +763,14 @@ export default function QuickDocumentModal({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={(e) => {
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setShowRoutineContextMenu({ 
-                          x: Math.min(rect.left, window.innerWidth - 330), 
-                          y: Math.min(rect.bottom + 6, window.innerHeight - 390) 
-                        });
-                      }}
+                      onClick={() => setShowExploreRoutinesModal(true)}
                       className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200/90 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all shadow-xs group cursor-pointer"
-                      title="Clique ou dê duplo clique com botão direito nesta tela para abrir rotinas"
+                      title="Gerenciar rotinas de exames (ou dê duplo clique com botão direito nesta tela para abrir o tooltip flutuante)"
                     >
                       <BookmarkCheck size={14} className="text-blue-700 group-hover:scale-110 transition-transform" />
-                      <span>Rotinas de Exames</span>
-                      <span className="text-[9px] bg-blue-200/80 text-blue-900 px-1 py-0.2 rounded font-normal hidden sm:inline">
-                        Duplo clique direito
+                      <span>Gerenciar Rotinas</span>
+                      <span className="text-[9px] bg-blue-200/80 text-blue-900 px-1.5 py-0.5 rounded font-normal hidden sm:inline">
+                        2x clique direito
                       </span>
                     </button>
                     <span className="text-[10px] text-slate-400 font-normal hidden md:inline">Enter para selecionar</span>
@@ -1000,26 +980,74 @@ export default function QuickDocumentModal({
         <>
           <div 
             className="fixed inset-0 z-[9998]" 
-            onClick={() => setShowRoutineContextMenu(null)}
-            onContextMenu={(e) => { e.preventDefault(); setShowRoutineContextMenu(null); }}
+            onClick={() => {
+              setShowRoutineContextMenu(null);
+              setRoutineContextMenuSearch('');
+            }}
+            onContextMenu={(e) => { 
+              e.preventDefault(); 
+              setShowRoutineContextMenu(null);
+              setRoutineContextMenuSearch('');
+            }}
           />
           <div 
-            className="fixed z-[9999] bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 w-80 max-h-[85vh] flex flex-col animate-scale-in text-slate-800 overflow-hidden"
+            className="fixed z-[9999] bg-white rounded-2xl shadow-2xl border border-slate-200 py-2 w-84 sm:w-96 max-h-[85vh] flex flex-col animate-scale-in text-slate-800 overflow-hidden"
             style={{ top: showRoutineContextMenu.y, left: showRoutineContextMenu.x }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.stopPropagation()}
           >
             {/* Header */}
             <div className="px-4 py-2.5 border-b border-slate-100 flex justify-between items-center bg-slate-50/90">
               <div className="flex items-center gap-2">
                 <BookmarkCheck size={16} className="text-blue-900" />
                 <span className="font-bold text-xs uppercase tracking-wide text-slate-800">Rotinas de Exames</span>
+                {examRoutines.length > 0 && (
+                  <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded-full font-semibold">
+                    {examRoutines.length}
+                  </span>
+                )}
               </div>
               <button 
                 type="button"
-                onClick={() => setShowRoutineContextMenu(null)}
+                onClick={() => {
+                  setShowRoutineContextMenu(null);
+                  setRoutineContextMenuSearch('');
+                }}
                 className="text-slate-400 hover:text-slate-600 p-0.5 rounded transition-colors"
+                title="Fechar"
               >
                 <X size={14} />
               </button>
+            </div>
+
+            {/* Search Bar for Routines */}
+            <div className="px-3 pt-2 pb-2 border-b border-slate-100 bg-white">
+              <div className="relative">
+                <input
+                  type="text"
+                  autoFocus
+                  value={routineContextMenuSearch}
+                  onChange={e => setRoutineContextMenuSearch(e.target.value)}
+                  placeholder="Pesquisar rotina ou exame..."
+                  className="w-full pl-8 pr-7 py-2 bg-slate-50 hover:bg-slate-100/80 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-900 focus:bg-white outline-none transition-all text-xs text-slate-800 placeholder:text-slate-400 shadow-inner"
+                  onClick={e => e.stopPropagation()}
+                  onKeyDown={e => e.stopPropagation()}
+                />
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                {routineContextMenuSearch && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRoutineContextMenuSearch('');
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-0.5 rounded-full hover:bg-slate-200 transition-colors"
+                    title="Limpar pesquisa"
+                  >
+                    <X size={12} />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Action: Create Routine */}
@@ -1042,13 +1070,20 @@ export default function QuickDocumentModal({
             </div>
 
             {/* Pre-created Routines List */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-1 max-h-60">
-              <p className="px-2 pt-1 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                Rotinas pré-criadas (clique para adicionar)
-              </p>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 max-h-64">
+              <div className="px-2 pt-1 pb-1 flex items-center justify-between">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  {routineContextMenuSearch.trim() ? 'Resultados da pesquisa' : 'Rotinas pré-criadas (clique para adicionar)'}
+                </p>
+                {routineContextMenuSearch.trim() && (
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    {filteredContextMenuRoutines.length} encontrada{filteredContextMenuRoutines.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
 
               {examRoutines.length === 0 ? (
-                <div className="text-center py-4 px-3 text-xs text-slate-400">
+                <div className="text-center py-5 px-3 text-xs text-slate-400">
                   Nenhuma rotina pré-criada ainda.<br />
                   <button 
                     type="button"
@@ -1058,8 +1093,20 @@ export default function QuickDocumentModal({
                     Criar minha primeira rotina
                   </button>
                 </div>
+              ) : filteredContextMenuRoutines.length === 0 ? (
+                <div className="text-center py-6 px-3 text-xs text-slate-500 space-y-1">
+                  <p className="font-semibold text-slate-700">Nenhuma rotina encontrada</p>
+                  <p className="text-[11px] text-slate-400">Nenhum resultado para "{routineContextMenuSearch}"</p>
+                  <button 
+                    type="button"
+                    onClick={() => setRoutineContextMenuSearch('')}
+                    className="text-blue-600 hover:underline font-bold text-xs mt-1 inline-block"
+                  >
+                    Limpar pesquisa
+                  </button>
+                </div>
               ) : (
-                examRoutines.map(routine => (
+                filteredContextMenuRoutines.map(routine => (
                   <div 
                     key={routine.id}
                     className="group flex items-center justify-between p-2 rounded-xl hover:bg-blue-50/70 transition-colors cursor-pointer border border-transparent hover:border-blue-100"
@@ -1067,11 +1114,16 @@ export default function QuickDocumentModal({
                     title={`Adicionar ${routine.exams.length} exames desta rotina aos exames solicitados`}
                   >
                     <div className="min-w-0 pr-2 flex-1">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <Bookmark size={13} className="text-blue-600 shrink-0" />
                         <span className="text-xs font-bold text-slate-800 truncate group-hover:text-blue-900">
                           {routine.name}
                         </span>
+                        {routine.category && (
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-medium shrink-0">
+                            {routine.category === 'laboratorial' ? 'Lab' : routine.category === 'imagem' ? 'Imagem' : 'Geral'}
+                          </span>
+                        )}
                       </div>
                       <div className="text-[10px] text-slate-500 mt-0.5 truncate flex items-center gap-1">
                         <span className="font-semibold text-slate-600">{routine.exams.length} exames</span>
@@ -1097,6 +1149,7 @@ export default function QuickDocumentModal({
                   type="button"
                   onClick={() => {
                     setShowRoutineContextMenu(null);
+                    setRoutineContextMenuSearch('');
                     setShowExploreRoutinesModal(true);
                   }}
                   className="w-full text-center text-xs font-bold text-slate-600 hover:text-blue-700 py-1.5 rounded-lg hover:bg-slate-200/60 transition-colors flex items-center justify-center gap-1.5"
